@@ -1,0 +1,97 @@
+{
+  "date": "2026-07-17",
+  "source_commit": "992c64c1b53ba7d2d0db2d810f7bbaed30d288b7",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "compute_capability": "9.0",
+    "memory_mib": 81559,
+    "driver": "595.58.03",
+    "driver_cuda_capability": "13.2",
+    "build_cuda_toolkit": "12.6",
+    "torch": "2.7.0+cu126"
+  },
+  "alternate_torch_environment": {
+    "path": "/root/.venv-torch-cu132",
+    "torch": "2.12.1+cu132",
+    "cuda_runtime": "13.2",
+    "native_grouped_mm_forward_backward": true,
+    "used_for_training_profile": false
+  },
+  "backend": {
+    "kda": "fla.ops.kda.chunk_kda",
+    "short_conv": "fla.modules.ShortConvolution",
+    "kda_output_norm_gate": "fla.modules.FusedRMSNormGated",
+    "attnres": "fla.ops.attnres.fused_attnres(checkpoint_level=1)",
+    "expert_permutation": "megablocks.ops sort/histogram/gather/scatter",
+    "expert_mlp": "CUTLASS grouped_gemm with CUDA-resident counts",
+    "expert_activation": "openkimi fused weighted SwiGLU Triton forward/backward",
+    "loss": "fla.modules.FusedLinearCrossEntropyLoss"
+  },
+  "acceptance": {
+    "macos_reference_tests_passed": true,
+    "h100_kernel_tests_passed": 5,
+    "h100_kernel_tests_failed": 0,
+    "smoke_optimizer_updates": 4,
+    "smoke_consumed_tokens": 1024,
+    "checkpoint_resume_exact": true,
+    "smoke_dead_experts": 0,
+    "moe_hot_path_dtoh_events": 0,
+    "moe_hot_path_stream_synchronizations": 0
+  },
+  "cuda_graph_audit": {
+    "latent_moe_capture": true,
+    "kda_capture": true,
+    "attnres_capture": true,
+    "full_step_capture": false,
+    "blocker": "Pinned FLA fused linear cross-entropy calls target.ne(ignore_index).sum().item()"
+  },
+  "primary_model": {
+    "parameters_total": 445227336,
+    "parameters_active_estimate": 179806536,
+    "sequence_length": 4096,
+    "batch_size": 1,
+    "gradient_accumulation": 1,
+    "torch_compile": false,
+    "optimizer_step_included": false,
+    "data_loading_included": false,
+    "activation_checkpointing": true,
+    "baseline": {
+      "source_commit": "3a80a1e",
+      "warmup": 1,
+      "iterations": 3,
+      "forward_backward_ms": 316.2471110026042,
+      "tokens_per_second": 12951.896973902383,
+      "peak_allocated_bytes": 4294895616,
+      "component_forward_backward_ms": {
+        "kda": 4.866304079691569,
+        "latent_moe": 6.215391794840495,
+        "nope_mla": 1.031551996866862,
+        "attnres_9_sources": 1.058666706085205
+      }
+    },
+    "optimized": {
+      "warmup": 5,
+      "iterations": 10,
+      "forward_backward_ms": 236.588037109375,
+      "tokens_per_second": 17312.794214131856,
+      "peak_allocated_bytes": 4291225600,
+      "component_forward_backward_ms": {
+        "kda": 5.095555114746094,
+        "latent_moe": 2.8557920455932617,
+        "nope_mla": 1.0714240074157715,
+        "attnres_9_sources": 1.0373791694641112
+      }
+    },
+    "measured_change": {
+      "forward_backward_latency_reduction_percent": 25.188870070839386,
+      "tokens_per_second_increase_percent": 33.669950039106446,
+      "latent_moe_latency_reduction_percent": 54.05290382556568
+    }
+  },
+  "notes": [
+    "Timings exclude one-time Triton/Inductor compilation and autotuning.",
+    "Full-step timings cover model forward and backward, not AdamW, gradient accumulation, or data loading.",
+    "The optimized timing uses a longer clock-warmed sample than the baseline.",
+    "The only synchronization in the post-change MoE profiler capture was the profiler's own boundary."
+  ]
+}

@@ -32,7 +32,7 @@ is zero-initialized.
 | KDA short convolution | causal PyTorch depthwise convolution | FLA Triton `ShortConvolution` |
 | NoPE MLA | PyTorch SDPA | SDPA FlashAttention backend |
 | Block AttnRes | readable depth softmax | FLA fused AttnRes + output RMSNorm, checkpoint level 1 |
-| Routed expert MLP | Python expert loop over stacked weights | MegaBlocks `grouped_gemm` dropless SwiGLU |
+| Routed expert MLP | Python expert loop over stacked weights | MegaBlocks permutation + CUDA-count CUTLASS grouped GEMM + fused weighted SwiGLU |
 | LM loss | PyTorch cross-entropy | FLA fused linear cross-entropy; full 128K logits are omitted |
 | Router | softmax top-4 with balance/z losses; sigmoid no-aux ablation | same |
 
@@ -160,9 +160,21 @@ sigmoid gate. Expensive expert-load diagnostics are evaluated only when the trai
 The first verified H100 result for the earlier untied 543M profile is committed in
 [`profiles/h100-sm90-2026-07-17.json`](profiles/h100-sm90-2026-07-17.json). On one H100 80GB, the
 untied profile measured 366.0 ms and 11,192 tokens/s for a batch of one 4,096-token sequence,
-with 4.90GB peak allocated for model forward/backward. These numbers exclude compilation, optimizer,
-and data loading; the current tied profile removes one 98.3M-parameter vocabulary matrix and will be
-profiled separately.
+with 4.90GB peak allocated for model forward/backward.
+
+The tied 445M profile and routed-kernel before/after measurements are in
+[`profiles/h100-sm90-tied-optimized.json`](profiles/h100-sm90-tied-optimized.json). The optimized
+path measured 236.6 ms and 17,313 tokens/s, versus 316.2 ms and 12,952 tokens/s before the routed
+changes: 25.2% lower full-step latency, 33.7% higher throughput, and 54.1% lower LatentMoE
+forward/backward latency. This is batch one at 4,096 context with one forward/backward microstep,
+activation checkpointing, no gradient accumulation, and no `torch.compile`; AdamW and data loading
+are excluded.
+
+The KDA, AttnRes, and routed-MoE components can each be captured by a CUDA Graph. Full-step capture
+is not enabled because the pinned FLA fused linear cross-entropy computes the non-ignored target
+count through a host scalar read. Keeping the memory-efficient 128K loss is preferable to silently
+falling back to materialized logits; graphing the complete train step therefore remains gated on a
+capture-safe fused-loss patch and DDP/optimizer replay tests.
 
 GPU parity tests are opt-in:
 

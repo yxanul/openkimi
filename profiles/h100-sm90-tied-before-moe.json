@@ -1,0 +1,21 @@
+{
+  "device": "cuda",
+  "backend": {
+    "requested": "h100",
+    "selected": "h100",
+    "kda": "fla.ops.kda.chunk_kda",
+    "short_conv": "fla.modules.ShortConvolution",
+    "attnres": "fla.ops.attnres.fused_attnres(checkpoint_level=1)",
+    "expert_mlp": "megablocks.grouped_gemm",
+    "loss": "fla.modules.FusedLinearCrossEntropyLoss"
+  },
+  "milliseconds_per_step": 316.2471110026042,
+  "tokens_per_second": 12951.896973902383,
+  "peak_memory_bytes": 4294895616,
+  "component_forward_backward_ms": {
+    "kda": 4.866304079691569,
+    "latent_moe": 6.215391794840495,
+    "nope_mla": 1.031551996866862,
+    "attnres_9_sources": 1.058666706085205
+  }
+}
