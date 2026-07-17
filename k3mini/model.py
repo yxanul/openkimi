@@ -253,18 +253,35 @@ class SwiGLU(nn.Module):
 
 
 def _router_diagnostics(
-    probabilities: torch.Tensor, indices: torch.Tensor, experts: int
+    probabilities: torch.Tensor,
+    indices: torch.Tensor,
+    experts: int,
+    load: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    load = torch.bincount(indices.flatten(), minlength=experts).to(torch.float32)
+    if load is None:
+        load = torch.bincount(indices.flatten(), minlength=experts).to(torch.float32)
     mean = load.mean().clamp_min(1.0)
     max_violation = (load.max() - mean) / mean
     entropy = -(probabilities * probabilities.clamp_min(1e-9).log()).sum(-1).mean()
     return load, entropy, max_violation
 
 
+def _expert_load(
+    indices: torch.Tensor,
+    experts: int,
+    backend: BackendStatus | None,
+) -> torch.Tensor:
+    if backend is not None and backend.selected is KernelBackend.H100:
+        from megablocks import ops as mb_ops
+
+        return mb_ops.histogram(indices.flatten().to(torch.int32), experts).to(torch.float32)
+    return torch.bincount(indices.flatten(), minlength=experts).to(torch.float32)
+
+
 class SoftmaxTopKRouter(nn.Module):
-    def __init__(self, cfg: ModelConfig) -> None:
+    def __init__(self, cfg: ModelConfig, backend: BackendStatus | None = None) -> None:
         super().__init__()
+        self.backend = backend
         self.n_experts = cfg.n_routed_experts
         self.top_k = cfg.top_k
         self.weight = nn.Parameter(torch.empty(self.n_experts, cfg.d_model))
@@ -279,9 +296,14 @@ class SoftmaxTopKRouter(nn.Module):
         probabilities = logits.softmax(dim=-1)
         selected_probabilities, indices = probabilities.topk(self.top_k, dim=-1, sorted=False)
         weights = selected_probabilities / selected_probabilities.sum(-1, keepdim=True).clamp_min(1e-9)
-        load = torch.bincount(indices.flatten(), minlength=self.n_experts).to(torch.float32)
+        load = _expert_load(indices, self.n_experts, self.backend)
         if collect_diagnostics:
-            _, entropy, max_violation = _router_diagnostics(probabilities, indices, self.n_experts)
+            _, entropy, max_violation = _router_diagnostics(
+                probabilities,
+                indices,
+                self.n_experts,
+                load,
+            )
         else:
             entropy = logits.new_zeros(())
             max_violation = logits.new_zeros(())
@@ -305,8 +327,9 @@ class SoftmaxTopKRouter(nn.Module):
 
 
 class SigmoidNoAuxTopKRouter(nn.Module):
-    def __init__(self, cfg: ModelConfig) -> None:
+    def __init__(self, cfg: ModelConfig, backend: BackendStatus | None = None) -> None:
         super().__init__()
+        self.backend = backend
         self.n_experts = cfg.n_routed_experts
         self.top_k = cfg.top_k
         self.scale = cfg.router_scale
@@ -340,12 +363,13 @@ class SigmoidNoAuxTopKRouter(nn.Module):
         indices = selection.topk(self.top_k, dim=-1, sorted=False).indices
         weights = probabilities.gather(1, indices)
         weights = self.scale * weights / weights.sum(-1, keepdim=True).clamp_min(1e-9)
-        load = torch.bincount(indices.flatten(), minlength=self.n_experts).to(torch.float32)
+        load = _expert_load(indices, self.n_experts, self.backend)
         if collect_diagnostics:
             _, entropy, max_violation = _router_diagnostics(
                 probabilities / probabilities.sum(-1, keepdim=True).clamp_min(1e-9),
                 indices,
                 self.n_experts,
+                load,
             )
         else:
             entropy = logits.new_zeros(())
@@ -466,9 +490,9 @@ class LatentMoE(nn.Module):
         self.d_model = cfg.d_model
         self.router: SoftmaxTopKRouter | SigmoidNoAuxTopKRouter
         if cfg.router_type is RouterType.SOFTMAX:
-            self.router = SoftmaxTopKRouter(cfg)
+            self.router = SoftmaxTopKRouter(cfg, backend)
         else:
-            self.router = SigmoidNoAuxTopKRouter(cfg)
+            self.router = SigmoidNoAuxTopKRouter(cfg, backend)
         self.down_proj = nn.Linear(cfg.d_model, cfg.latent_dim, bias=False)
         self.up_proj = nn.Linear(cfg.latent_dim, cfg.d_model, bias=False)
         self.routed_experts = StackedRoutedExperts(cfg, backend)

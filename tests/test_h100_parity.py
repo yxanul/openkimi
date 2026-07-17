@@ -8,7 +8,12 @@ import torch.nn.functional as F
 
 from k3mini.backends import resolve_backend
 from k3mini.config import KernelBackend, ModelConfig
-from k3mini.model import BlockAttnResRead, StackedRoutedExperts, kda_recurrent_reference
+from k3mini.model import (
+    BlockAttnResRead,
+    SoftmaxTopKRouter,
+    StackedRoutedExperts,
+    kda_recurrent_reference,
+)
 
 H100_ENABLED = (
     torch.cuda.is_available()
@@ -149,6 +154,17 @@ def test_fused_weighted_swiglu_forward_and_gradient_parity() -> None:
     assert _relative_error(output_fused, output_reference) < 5e-3
     assert _relative_error(gate_up_fused.grad, gate_up_reference.grad) < 5e-3
     assert _relative_error(route_fused.grad, route_reference.grad) < 5e-3
+
+
+def test_router_device_histogram_parity() -> None:
+    cfg = _kernel_config()
+    router = SoftmaxTopKRouter(cfg, resolve_backend(KernelBackend.H100)).cuda()
+    hidden = torch.randn(511, cfg.d_model, device="cuda", dtype=torch.bfloat16)
+    routing = router(hidden, collect_diagnostics=False)
+    expected = torch.bincount(routing.indices.flatten(), minlength=cfg.n_routed_experts).float()
+    torch.testing.assert_close(routing.load, expected)
+    assert routing.entropy.item() == 0.0
+    assert routing.max_load_violation.item() == 0.0
 
 
 def test_grouped_gemm_empty_and_heavy_expert_parity() -> None:
