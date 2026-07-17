@@ -23,6 +23,7 @@
     "router_z_loss_coefficient": 0.001,
     "tie_embeddings": true,
     "kernel_backend": "h100",
+    "loss_backend": "liger",
     "activation_checkpointing": true
   },
   "data": {

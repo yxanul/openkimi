@@ -156,6 +156,36 @@ def test_fused_weighted_swiglu_forward_and_gradient_parity() -> None:
     assert _relative_error(route_fused.grad, route_reference.grad) < 5e-3
 
 
+def test_liger_fused_linear_cross_entropy_gradient_parity() -> None:
+    from fla.modules import FusedLinearCrossEntropyLoss
+    from liger_kernel.transformers import LigerFusedLinearCrossEntropyLoss
+
+    torch.manual_seed(456)
+    hidden_fla = torch.randn(512, 128, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+    hidden_liger = hidden_fla.detach().clone().requires_grad_(True)
+    weight_fla = torch.randn(257, 128, device="cuda", requires_grad=True)
+    weight_liger = weight_fla.detach().clone().requires_grad_(True)
+    labels = torch.randint(257, (512,), device="cuda")
+    fla = FusedLinearCrossEntropyLoss(
+        ignore_index=-100,
+        num_chunks=8,
+        accumulate_grad_in_fp32=True,
+    )
+    liger = LigerFusedLinearCrossEntropyLoss(
+        ignore_index=-100,
+        reduction="mean",
+        accum_dtype=torch.float32,
+    )
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        loss_fla = fla(hidden_fla, labels, weight_fla)
+        loss_liger = liger(weight_liger, hidden_liger, labels)
+    loss_fla.backward()
+    loss_liger.backward()
+    torch.testing.assert_close(loss_liger, loss_fla, atol=5e-3, rtol=5e-3)
+    assert _relative_error(hidden_liger.grad, hidden_fla.grad) < 5e-3
+    assert _relative_error(weight_liger.grad, weight_fla.grad) < 5e-3
+
+
 def test_router_device_histogram_parity() -> None:
     cfg = _kernel_config()
     router = SoftmaxTopKRouter(cfg, resolve_backend(KernelBackend.H100)).cuda()

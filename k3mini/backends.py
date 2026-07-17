@@ -5,7 +5,7 @@ from importlib.util import find_spec
 
 import torch
 
-from .config import KernelBackend
+from .config import KernelBackend, LossBackend
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +16,7 @@ class BackendStatus:
     short_conv: str
     attnres: str
     expert_mlp: str
+    loss_backend: LossBackend
     loss: str
 
     def as_dict(self) -> dict[str, str]:
@@ -26,6 +27,7 @@ class BackendStatus:
             "short_conv": self.short_conv,
             "attnres": self.attnres,
             "expert_mlp": self.expert_mlp,
+            "loss_backend": self.loss_backend.value,
             "loss": self.loss,
         }
 
@@ -46,7 +48,25 @@ def _cuda_dependencies() -> tuple[bool, list[str]]:
     return not missing, missing
 
 
-def resolve_backend(requested: KernelBackend) -> BackendStatus:
+def _resolve_loss_backend(requested: LossBackend, kernel_backend: KernelBackend) -> LossBackend:
+    requested = LossBackend(requested)
+    if kernel_backend is KernelBackend.REFERENCE:
+        if requested not in {LossBackend.AUTO, LossBackend.TORCH}:
+            raise RuntimeError(f"loss_backend={requested.value} requires the H100 kernel backend")
+        return LossBackend.TORCH
+    if requested is LossBackend.AUTO:
+        return LossBackend.LIGER if find_spec("liger_kernel") is not None else LossBackend.FLA
+    if requested is LossBackend.LIGER and find_spec("liger_kernel") is None:
+        raise RuntimeError(
+            "loss_backend=liger requires liger-kernel; install with `uv sync --extra cuda`"
+        )
+    return requested
+
+
+def resolve_backend(
+    requested: KernelBackend,
+    loss_backend: LossBackend = LossBackend.AUTO,
+) -> BackendStatus:
     requested = KernelBackend(requested)
     dependencies_ok, missing = _cuda_dependencies()
     if requested is KernelBackend.H100:
@@ -64,7 +84,13 @@ def resolve_backend(requested: KernelBackend) -> BackendStatus:
     else:
         selected = KernelBackend.REFERENCE
 
+    selected_loss = _resolve_loss_backend(loss_backend, selected)
     if selected is KernelBackend.H100:
+        loss_name = {
+            LossBackend.TORCH: "torch.cross_entropy",
+            LossBackend.FLA: "fla.modules.FusedLinearCrossEntropyLoss",
+            LossBackend.LIGER: "liger_kernel.LigerFusedLinearCrossEntropyLoss",
+        }[selected_loss]
         return BackendStatus(
             requested=requested,
             selected=selected,
@@ -72,7 +98,8 @@ def resolve_backend(requested: KernelBackend) -> BackendStatus:
             short_conv="fla.modules.ShortConvolution",
             attnres="fla.ops.attnres.fused_attnres(checkpoint_level=1)",
             expert_mlp="megablocks.permute+device_counts+grouped_gemm",
-            loss="fla.modules.FusedLinearCrossEntropyLoss",
+            loss_backend=selected_loss,
+            loss=loss_name,
         )
     return BackendStatus(
         requested=requested,
@@ -81,5 +108,6 @@ def resolve_backend(requested: KernelBackend) -> BackendStatus:
         short_conv="torch.depthwise_conv1d",
         attnres="torch.depth_softmax",
         expert_mlp="torch.expert_loop",
+        loss_backend=selected_loss,
         loss="torch.cross_entropy",
     )

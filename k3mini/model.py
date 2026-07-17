@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 from .backends import BackendStatus, resolve_backend
-from .config import KernelBackend, ModelConfig, RouterType
+from .config import KernelBackend, LossBackend, ModelConfig, RouterType
 
 
 @dataclass(slots=True)
@@ -701,7 +701,7 @@ class K3MiniForCausalLM(nn.Module):
         super().__init__()
         cfg.validate()
         self.cfg = cfg
-        self.backend = resolve_backend(cfg.kernel_backend)
+        self.backend = resolve_backend(cfg.kernel_backend, cfg.loss_backend)
         self.token_embedding = nn.Embedding(cfg.vocab_size, cfg.d_model)
         self.layers = nn.ModuleList(
             [K3MiniBlock(cfg, layer_idx, self.backend) for layer_idx in range(cfg.n_layers)]
@@ -709,6 +709,24 @@ class K3MiniForCausalLM(nn.Module):
         self.final_read = BlockAttnResRead(cfg.d_model, cfg.rms_norm_eps, self.backend)
         self.final_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.lm_head = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
+        if self.backend.loss_backend is LossBackend.LIGER:
+            from liger_kernel.transformers import LigerFusedLinearCrossEntropyLoss
+
+            self.loss_fn: nn.Module | None = LigerFusedLinearCrossEntropyLoss(
+                ignore_index=-100,
+                reduction="mean",
+                accum_dtype=torch.float32,
+            )
+        elif self.backend.loss_backend is LossBackend.FLA:
+            from fla.modules import FusedLinearCrossEntropyLoss
+
+            self.loss_fn = FusedLinearCrossEntropyLoss(
+                ignore_index=-100,
+                num_chunks=8,
+                accumulate_grad_in_fp32=True,
+            )
+        else:
+            self.loss_fn = None
         self.apply(self._init_weights)
         if cfg.tie_embeddings:
             self.lm_head.weight = self.token_embedding.weight
@@ -721,11 +739,19 @@ class K3MiniForCausalLM(nn.Module):
     def _lm_loss(
         self, hidden: torch.Tensor, labels: torch.Tensor, return_logits: bool
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if self.backend.selected is KernelBackend.H100 and not return_logits:
-            from fla.modules import FusedLinearCrossEntropyLoss
-
-            criterion = FusedLinearCrossEntropyLoss(ignore_index=-100)
-            return criterion(hidden, labels, self.lm_head.weight), None
+        if self.backend.loss_backend is LossBackend.LIGER and not return_logits:
+            assert self.loss_fn is not None
+            return (
+                self.loss_fn(
+                    self.lm_head.weight,
+                    hidden.flatten(0, 1),
+                    labels.flatten(),
+                ),
+                None,
+            )
+        if self.backend.loss_backend is LossBackend.FLA and not return_logits:
+            assert self.loss_fn is not None
+            return self.loss_fn(hidden, labels, self.lm_head.weight), None
         logits = self.lm_head(hidden)
         loss = F.cross_entropy(logits.flatten(0, 1), labels.flatten(), ignore_index=-100)
         return loss, logits if return_logits else None

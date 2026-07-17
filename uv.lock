@@ -429,6 +429,7 @@ dependencies = [
 cuda = [
     { name = "flash-linear-attention", extra = ["cuda"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "grouped-gemm", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "liger-kernel", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "megablocks", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 
@@ -444,6 +445,7 @@ requires-dist = [
     { name = "flash-linear-attention", extras = ["cuda"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/fla-org/flash-linear-attention.git?rev=ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17" },
     { name = "grouped-gemm", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", specifier = "==0.3.0" },
     { name = "huggingface-hub", specifier = ">=0.33.0,<2" },
+    { name = "liger-kernel", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/linkedin/Liger-Kernel.git?rev=72a4ed47a5c593b58045a0af14d3f774a037bd92" },
     { name = "megablocks", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/databricks/megablocks.git?rev=952db33d6eac334d22c61e47a0d5d41446298784" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "tokenizers", specifier = ">=0.21.0,<1" },
@@ -455,6 +457,15 @@ provides-extras = ["cuda"]
 dev = [
     { name = "pytest", specifier = ">=8.3,<10" },
     { name = "ruff", specifier = ">=0.12,<1" },
+]
+
+[[package]]
+name = "liger-kernel"
+version = "0.8.0"
+source = { git = "https://github.com/linkedin/Liger-Kernel.git?rev=72a4ed47a5c593b58045a0af14d3f774a037bd92#72a4ed47a5c593b58045a0af14d3f774a037bd92" }
+dependencies = [
+    { name = "torch" },
+    { name = "triton" },
 ]
 
 [[package]]

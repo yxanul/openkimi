@@ -13,6 +13,13 @@ class KernelBackend(StrEnum):
     H100 = "h100"
 
 
+class LossBackend(StrEnum):
+    AUTO = "auto"
+    TORCH = "torch"
+    FLA = "fla"
+    LIGER = "liger"
+
+
 class RouterType(StrEnum):
     SOFTMAX = "softmax"
     SIGMOID_NOAUX = "sigmoid_noaux"
@@ -49,11 +56,13 @@ class ModelConfig:
     dropout: float = 0.0
     tie_embeddings: bool = True
     kernel_backend: KernelBackend = KernelBackend.AUTO
+    loss_backend: LossBackend = LossBackend.AUTO
     activation_checkpointing: bool = True
 
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
         self.kernel_backend = KernelBackend(self.kernel_backend)
+        self.loss_backend = LossBackend(self.loss_backend)
 
     @property
     def is_primary_shape(self) -> bool:
