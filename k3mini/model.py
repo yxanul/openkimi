@@ -465,7 +465,13 @@ class LatentMoE(nn.Module):
         flat = x.flatten(0, 1)
         routing = self.router(flat)
         latent = self.down_proj(flat)
-        routed = self.up_proj(self.routed_experts(latent, routing.indices, routing.weights))
+        routed = self.up_proj(
+            self.routed_experts(
+                latent,
+                routing.indices,
+                routing.weights.to(latent.dtype),
+            )
+        )
         shared = sum((expert(flat) for expert in self.shared_experts), torch.zeros_like(flat))
         return (routed + shared).view_as(x), routing
 
