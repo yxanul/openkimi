@@ -1,0 +1,44 @@
+{
+  "model": {
+    "vocab_size": 257,
+    "d_model": 64,
+    "n_layers": 4,
+    "n_heads": 4,
+    "kda_head_dim": 16,
+    "kda_conv_kernel": 3,
+    "global_attn_every": 4,
+    "mla_qk_head_dim": 16,
+    "mla_v_head_dim": 16,
+    "mla_kv_lora_rank": 16,
+    "attnres_block_size": 2,
+    "latent_dim": 16,
+    "n_routed_experts": 8,
+    "top_k": 2,
+    "expert_ffn_dim": 48,
+    "n_shared_experts": 1,
+    "shared_ffn_dim": 96,
+    "router_type": "softmax",
+    "tie_embeddings": false,
+    "kernel_backend": "reference",
+    "activation_checkpointing": false
+  },
+  "data": {
+    "sequence_length": 32,
+    "eod_token_id": 256,
+    "shuffle_buffer_size": 128,
+    "tokenizer_batch_size": 8,
+    "validation_tokens": 4096,
+    "seed": 1234
+  },
+  "train": {
+    "output_dir": "runs/tiny",
+    "target_tokens": 4096,
+    "global_batch_tokens": 128,
+    "microbatch_sequences": 1,
+    "warmup_updates": 2,
+    "validate_every_tokens": 2048,
+    "checkpoint_every_tokens": 2048,
+    "precision": "fp32",
+    "seed": 1234
+  }
+}
