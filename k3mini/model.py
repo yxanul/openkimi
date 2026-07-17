@@ -15,6 +15,16 @@ from .backends import BackendStatus, resolve_backend
 from .config import KernelBackend, LossBackend, ModelConfig, RouterType
 
 
+@torch.compiler.disable
+def _run_external_fused_loss(
+    loss_fn: nn.Module,
+    weight: torch.Tensor,
+    hidden: torch.Tensor,
+    labels: torch.Tensor,
+) -> torch.Tensor:
+    return loss_fn(weight, hidden.flatten(0, 1), labels.flatten())
+
+
 @dataclass(slots=True)
 class ModelOutput:
     loss: torch.Tensor | None
@@ -741,14 +751,12 @@ class K3MiniForCausalLM(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.backend.loss_backend is LossBackend.LIGER and not return_logits:
             assert self.loss_fn is not None
-            return (
-                self.loss_fn(
-                    self.lm_head.weight,
-                    hidden.flatten(0, 1),
-                    labels.flatten(),
-                ),
-                None,
-            )
+            return _run_external_fused_loss(
+                self.loss_fn,
+                self.lm_head.weight,
+                hidden,
+                labels,
+            ), None
         if self.backend.loss_backend is LossBackend.FLA and not return_logits:
             assert self.loss_fn is not None
             return self.loss_fn(hidden, labels, self.lm_head.weight), None
