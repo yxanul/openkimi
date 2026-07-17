@@ -25,6 +25,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Profile one warmed H100 optimizer update.")
     parser.add_argument("--config", default="configs/h100-batch64-compiled.json")
     parser.add_argument("--warmup", type=int, default=2)
+    parser.add_argument("--compile", action="store_true", help="compile the model with torch.compile")
     parser.add_argument(
         "--cuda-profiler-range",
         action="store_true",
@@ -43,8 +44,9 @@ def main() -> None:
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     device = torch.device("cuda")
-    model = K3MiniForCausalLM(model_cfg).to(device).train()
-    optimizer = build_optimizer(model, train_cfg)
+    raw_model = K3MiniForCausalLM(model_cfg).to(device).train()
+    optimizer = build_optimizer(raw_model, train_cfg)
+    model = torch.compile(raw_model) if args.compile else raw_model
     input_ids = torch.randint(
         model_cfg.vocab_size,
         (train_cfg.microbatch_sequences, data_cfg.sequence_length),
@@ -93,7 +95,7 @@ def main() -> None:
         json.dumps(
             {
                 "device": torch.cuda.get_device_name(),
-                "torch_compile": False,
+                "torch_compile": args.compile,
                 "microbatch_sequences": train_cfg.microbatch_sequences,
                 "sequence_length": data_cfg.sequence_length,
                 "gradient_accumulation_steps": train_cfg.gradient_accumulation(data_cfg, 1),
@@ -102,7 +104,7 @@ def main() -> None:
                 "tokens_per_second": tokens / (elapsed_ms / 1000),
                 "peak_allocated_gib": torch.cuda.max_memory_allocated() / 2**30,
                 "peak_reserved_gib": torch.cuda.max_memory_reserved() / 2**30,
-                "backend": model.backend.as_dict(),
+                "backend": raw_model.backend.as_dict(),
             },
             indent=2,
         )
