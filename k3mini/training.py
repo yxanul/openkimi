@@ -283,6 +283,11 @@ def train(
         should_log = update % train_cfg.log_every_updates == 0 or update == 1
         router_diagnostics = raw_model.router_diagnostics() if should_log else {}
         if context.is_main and should_log:
+            # Wall-clock throughput must include all CUDA work enqueued for the
+            # update. Synchronize only at the existing logging boundary so the
+            # hot path between reports remains asynchronous.
+            if context.device.type == "cuda":
+                torch.cuda.synchronize(context.device)
             elapsed = max(1e-9, time.perf_counter() - log_start)
             divisor = 1 if update == 1 else train_cfg.log_every_updates
             print(
