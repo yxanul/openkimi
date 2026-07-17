@@ -70,10 +70,11 @@ The CUDA extra pins these inspected revisions:
 - `fla-org/flash-linear-attention@ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17`
 - `databricks/megablocks@952db33d6eac334d22c61e47a0d5d41446298784`
 
-`uv` supplies Torch as an explicit build dependency for MegaBlocks and `grouped_gemm`. Both packages
-are guarded by Linux x86-64 markers and are not installed into the macOS environment. Record
-`nvidia-smi`, driver, CUDA toolkit, GPU model, and the successful backend report when the target SSH
-host is available.
+`uv` supplies Torch as an explicit build dependency for MegaBlocks and `grouped_gemm`, and sets
+`GROUPED_GEMM_CUTLASS=1` specifically for the latter so expert counts can remain CUDA-resident.
+Both packages are guarded by Linux x86-64 markers and are not installed into the macOS environment.
+Record `nvidia-smi`, driver, CUDA toolkit, GPU model, and the successful backend report when the
+target SSH host is available.
 
 ## Configuration and commands
 
@@ -149,6 +150,12 @@ uv run k3-mini kernel-benchmark \
 The report includes the selected KDA, short-convolution, AttnRes, expert, and loss backends; full
 step latency; tokens/second; peak CUDA memory; and forward/backward timings for KDA, MLA, LatentMoE,
 and nine-source AttnRes.
+
+The H100 expert path keeps routing metadata on-device: MegaBlocks sort/histogram/gather/scatter
+kernels perform permutation and unpermutation, CUTLASS grouped GEMM consumes CUDA-resident expert
+counts, gate/up projections share one grouped GEMM, and selected router weights are applied to the
+SwiGLU activation before the down projection. The KDA output also uses FLA's fused RMSNorm plus
+sigmoid gate. Expensive expert-load diagnostics are evaluated only when the trainer logs.
 
 The first verified H100 result for the earlier untied 543M profile is committed in
 [`profiles/h100-sm90-2026-07-17.json`](profiles/h100-sm90-2026-07-17.json). On one H100 80GB, the

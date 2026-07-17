@@ -130,6 +130,27 @@ def test_fused_attnres_forward_and_gradient_parity() -> None:
     assert _relative_error(fused.pseudo_query.grad, reference.pseudo_query.grad) < 5e-3
 
 
+def test_fused_weighted_swiglu_forward_and_gradient_parity() -> None:
+    from k3mini.cuda_kernels import fused_weighted_swiglu
+
+    torch.manual_seed(321)
+    gate_up_reference = torch.randn(
+        137, 1024, device="cuda", dtype=torch.bfloat16, requires_grad=True
+    )
+    route_reference = torch.rand(137, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+    gate_up_fused = gate_up_reference.detach().clone().requires_grad_(True)
+    route_fused = route_reference.detach().clone().requires_grad_(True)
+    gate, up = gate_up_reference.chunk(2, dim=-1)
+    output_reference = F.silu(gate) * up * route_reference.unsqueeze(-1)
+    output_fused = fused_weighted_swiglu(gate_up_fused, route_fused)
+    gradient = torch.randn_like(output_reference)
+    output_reference.backward(gradient)
+    output_fused.backward(gradient)
+    assert _relative_error(output_fused, output_reference) < 5e-3
+    assert _relative_error(gate_up_fused.grad, gate_up_reference.grad) < 5e-3
+    assert _relative_error(route_fused.grad, route_reference.grad) < 5e-3
+
+
 def test_grouped_gemm_empty_and_heavy_expert_parity() -> None:
     cfg = _kernel_config()
     reference = StackedRoutedExperts(cfg, resolve_backend(KernelBackend.REFERENCE)).cuda()
@@ -149,4 +170,4 @@ def test_grouped_gemm_empty_and_heavy_expert_parity() -> None:
     output_grouped.backward(gradient)
     assert _relative_error(output_grouped, output_reference) < 5e-3
     assert _relative_error(latent_grouped.grad, latent_reference.grad) < 5e-3
-    assert _relative_error(grouped.gate_weight.grad, reference.gate_weight.grad) < 5e-3
+    assert _relative_error(grouped.gate_up_weight.grad, reference.gate_up_weight.grad) < 5e-3

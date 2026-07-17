@@ -144,7 +144,16 @@ class KimiDeltaAttention(nn.Module):
         self.beta_proj = nn.Linear(cfg.d_model, self.n_heads, bias=False)
         self.out_gate_a = nn.Linear(cfg.d_model, self.head_dim, bias=False)
         self.out_gate_b = nn.Linear(self.head_dim, projection_size, bias=False)
-        self.out_norm_gate = HeadwiseRMSNormGate(self.head_dim, cfg.rms_norm_eps)
+        if backend.selected is KernelBackend.H100:
+            from fla.modules import FusedRMSNormGated
+
+            self.out_norm_gate = FusedRMSNormGated(
+                self.head_dim,
+                activation="sigmoid",
+                eps=cfg.rms_norm_eps,
+            )
+        else:
+            self.out_norm_gate = HeadwiseRMSNormGate(self.head_dim, cfg.rms_norm_eps)
         self.out_proj = nn.Linear(projection_size, cfg.d_model, bias=False)
         self.scale = self.head_dim**-0.5
 
@@ -265,23 +274,22 @@ class SoftmaxTopKRouter(nn.Module):
         self.register_buffer("last_max_load_violation", torch.zeros(()))
         self.register_buffer("consecutive_dead_steps", torch.zeros(self.n_experts, dtype=torch.long))
 
-    def forward(self, x: torch.Tensor) -> RouterOutput:
+    def forward(self, x: torch.Tensor, *, collect_diagnostics: bool = True) -> RouterOutput:
         logits = F.linear(x.float(), self.weight.float())
         probabilities = logits.softmax(dim=-1)
         selected_probabilities, indices = probabilities.topk(self.top_k, dim=-1, sorted=False)
         weights = selected_probabilities / selected_probabilities.sum(-1, keepdim=True).clamp_min(1e-9)
-        load, entropy, max_violation = _router_diagnostics(probabilities, indices, self.n_experts)
+        load = torch.bincount(indices.flatten(), minlength=self.n_experts).to(torch.float32)
+        if collect_diagnostics:
+            _, entropy, max_violation = _router_diagnostics(probabilities, indices, self.n_experts)
+        else:
+            entropy = logits.new_zeros(())
+            max_violation = logits.new_zeros(())
         with torch.no_grad():
             self.last_load.copy_(load)
-            self.last_entropy.copy_(entropy)
-            self.last_max_load_violation.copy_(max_violation)
-            self.consecutive_dead_steps.copy_(
-                torch.where(
-                    load == 0,
-                    self.consecutive_dead_steps + 1,
-                    torch.zeros_like(self.consecutive_dead_steps),
-                )
-            )
+            if collect_diagnostics:
+                self.last_entropy.copy_(entropy)
+                self.last_max_load_violation.copy_(max_violation)
         load_fraction = load / load.sum().clamp_min(1.0)
         auxiliary_loss = self.n_experts * torch.sum(probabilities.mean(0) * load_fraction)
         z_loss = torch.logsumexp(logits, dim=-1).square().mean()
@@ -325,29 +333,28 @@ class SigmoidNoAuxTopKRouter(nn.Module):
         mask.scatter_(1, chosen, True)
         return scores.masked_fill(~mask.unsqueeze(-1).expand_as(grouped).reshape_as(scores), -torch.inf)
 
-    def forward(self, x: torch.Tensor) -> RouterOutput:
+    def forward(self, x: torch.Tensor, *, collect_diagnostics: bool = True) -> RouterOutput:
         logits = F.linear(x.float(), self.weight.float())
         probabilities = logits.sigmoid()
         selection = self._group_mask(probabilities + self.e_score_correction_bias.float().unsqueeze(0))
         indices = selection.topk(self.top_k, dim=-1, sorted=False).indices
         weights = probabilities.gather(1, indices)
         weights = self.scale * weights / weights.sum(-1, keepdim=True).clamp_min(1e-9)
-        load, entropy, max_violation = _router_diagnostics(
-            probabilities / probabilities.sum(-1, keepdim=True).clamp_min(1e-9),
-            indices,
-            self.n_experts,
-        )
+        load = torch.bincount(indices.flatten(), minlength=self.n_experts).to(torch.float32)
+        if collect_diagnostics:
+            _, entropy, max_violation = _router_diagnostics(
+                probabilities / probabilities.sum(-1, keepdim=True).clamp_min(1e-9),
+                indices,
+                self.n_experts,
+            )
+        else:
+            entropy = logits.new_zeros(())
+            max_violation = logits.new_zeros(())
         with torch.no_grad():
             self.pending_load.add_(load.to(self.pending_load))
-            self.last_entropy.copy_(entropy)
-            self.last_max_load_violation.copy_(max_violation)
-            self.consecutive_dead_steps.copy_(
-                torch.where(
-                    load == 0,
-                    self.consecutive_dead_steps + 1,
-                    torch.zeros_like(self.consecutive_dead_steps),
-                )
-            )
+            if collect_diagnostics:
+                self.last_entropy.copy_(entropy)
+                self.last_max_load_violation.copy_(max_violation)
         zero = logits.new_zeros(())
         return RouterOutput(
             indices=indices,
@@ -378,66 +385,74 @@ class StackedRoutedExperts(nn.Module):
     def __init__(self, cfg: ModelConfig, backend: BackendStatus) -> None:
         super().__init__()
         self.backend = backend
-        shape_in = (cfg.n_routed_experts, cfg.expert_ffn_dim, cfg.latent_dim)
+        shape_in = (cfg.n_routed_experts, 2 * cfg.expert_ffn_dim, cfg.latent_dim)
         shape_out = (cfg.n_routed_experts, cfg.expert_ffn_dim, cfg.latent_dim)
-        self.gate_weight = nn.Parameter(torch.empty(shape_in))
-        self.up_weight = nn.Parameter(torch.empty(shape_in))
+        self.gate_up_weight = nn.Parameter(torch.empty(shape_in))
         self.down_weight = nn.Parameter(torch.empty(shape_out))
+        self.n_experts = cfg.n_routed_experts
+        self.top_k = cfg.top_k
+        self.sort_end_bit = max(math.ceil(math.log2(self.n_experts)), 1)
         for parameter in self.parameters():
             nn.init.normal_(parameter, mean=0.0, std=0.02)
 
     def _reference(self, latent: torch.Tensor, indices: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
         output = torch.zeros_like(latent)
-        for expert_id in range(self.gate_weight.shape[0]):
+        for expert_id in range(self.n_experts):
             token_pos, slot_pos = torch.where(indices == expert_id)
             if token_pos.numel() == 0:
                 continue
             expert_input = latent.index_select(0, token_pos)
-            gate_weight = self.gate_weight[expert_id].to(expert_input.dtype)
-            up_weight = self.up_weight[expert_id].to(expert_input.dtype)
+            gate_up_weight = self.gate_up_weight[expert_id].to(expert_input.dtype)
             down_weight = self.down_weight[expert_id].to(expert_input.dtype)
-            hidden = F.silu(F.linear(expert_input, gate_weight))
-            hidden = hidden * F.linear(expert_input, up_weight)
+            gate, up = F.linear(expert_input, gate_up_weight).chunk(2, dim=-1)
+            hidden = F.silu(gate) * up
+            hidden = hidden * weights[token_pos, slot_pos].unsqueeze(-1)
             expert_output = F.linear(hidden, down_weight.transpose(0, 1))
-            output.index_add_(0, token_pos, expert_output * weights[token_pos, slot_pos].unsqueeze(-1))
+            output.index_add_(0, token_pos, expert_output)
         return output
 
     def _grouped(self, latent: torch.Tensor, indices: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
         from megablocks import grouped_gemm_util as gg
+        from megablocks import ops as mb_ops
 
-        flat_experts = indices.flatten()
-        flat_tokens = (
-            torch.arange(indices.shape[0], device=indices.device).unsqueeze(1).expand_as(indices).flatten()
-        )
-        flat_weights = weights.flatten()
-        order = flat_experts.argsort(stable=True)
-        sorted_experts = flat_experts.index_select(0, order)
-        sorted_tokens = flat_tokens.index_select(0, order)
-        sorted_input = latent.index_select(0, sorted_tokens).contiguous()
-        tokens_per_expert = torch.bincount(sorted_experts, minlength=self.gate_weight.shape[0]).cpu().long()
         if gg.ops is None:
             raise RuntimeError("grouped_gemm is unavailable despite selecting the H100 backend")
-        gate = gg.ops.gmm(
+        flat_experts = indices.flatten().to(torch.int32)
+        with torch.no_grad():
+            bin_ids, permutation = mb_ops.sort(flat_experts, self.sort_end_bit)
+            token_counts = mb_ops.histogram(flat_experts, self.n_experts)
+            bins = mb_ops.inclusive_cumsum(token_counts, 0)
+            tokens_per_expert = token_counts.to(torch.long)
+        sorted_input = mb_ops.gather(
+            latent,
+            permutation,
+            bin_ids,
+            bins,
+            self.top_k,
+        ).contiguous()
+        gate_up = gg.ops.gmm(
             sorted_input,
-            self.gate_weight.to(sorted_input.dtype).contiguous(),
+            self.gate_up_weight.to(sorted_input.dtype).contiguous(),
             tokens_per_expert,
             trans_b=True,
         )
-        up = gg.ops.gmm(
-            sorted_input,
-            self.up_weight.to(sorted_input.dtype).contiguous(),
-            tokens_per_expert,
-            trans_b=True,
-        )
+        from .cuda_kernels import fused_weighted_swiglu
+
+        sorted_weights = weights.flatten().index_select(0, permutation)
+        hidden = fused_weighted_swiglu(gate_up, sorted_weights)
         expert_output = gg.ops.gmm(
-            F.silu(gate) * up,
+            hidden,
             self.down_weight.to(sorted_input.dtype).contiguous(),
             tokens_per_expert,
         )
-        expert_output = expert_output * flat_weights.index_select(0, order).unsqueeze(-1)
-        output = torch.zeros_like(latent)
-        output.index_add_(0, sorted_tokens, expert_output)
-        return output
+        return mb_ops.scatter(
+            expert_output,
+            permutation,
+            bin_ids,
+            None,
+            bins,
+            self.top_k,
+        )
 
     def forward(self, latent: torch.Tensor, indices: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
         if self.backend.selected is KernelBackend.H100:
@@ -461,9 +476,11 @@ class LatentMoE(nn.Module):
             [SwiGLU(cfg.d_model, cfg.shared_ffn_dim, cfg.d_model) for _ in range(cfg.n_shared_experts)]
         )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, RouterOutput]:
+    def forward(
+        self, x: torch.Tensor, *, diagnostics: bool = False
+    ) -> tuple[torch.Tensor, RouterOutput]:
         flat = x.flatten(0, 1)
-        routing = self.router(flat)
+        routing = self.router(flat, collect_diagnostics=diagnostics)
         latent = self.down_proj(flat)
         routed = self.up_proj(
             self.routed_experts(
@@ -601,7 +618,7 @@ class K3MiniBlock(nn.Module):
                     result = self.ffn(ffn_hidden)
                     step_zero = ffn_hidden.new_zeros(())
                     return result, step_zero, step_zero
-                result, step_routing = self.ffn(ffn_hidden)
+                result, step_routing = self.ffn(ffn_hidden, diagnostics=False)
                 return result, step_routing.auxiliary_loss, step_routing.z_loss
 
             ffn_output, auxiliary_loss, z_loss = checkpoint(ffn_step, *ffn_sources, use_reentrant=False)
@@ -619,14 +636,18 @@ class K3MiniBlock(nn.Module):
                 auxiliary_loss, z_loss = zero, zero
                 router_stats = {}
             else:
-                ffn_output, routing = self.ffn(hidden)
+                ffn_output, routing = self.ffn(hidden, diagnostics=diagnostics)
                 auxiliary_loss, z_loss = routing.auxiliary_loss, routing.z_loss
-                router_stats = {
-                    "load": routing.load,
-                    "entropy": routing.entropy,
-                    "dead_experts": int((routing.load == 0).sum().item()),
-                    "max_load_violation": routing.max_load_violation,
-                }
+                router_stats = (
+                    {
+                        "load": routing.load,
+                        "entropy": routing.entropy,
+                        "dead_experts": int((routing.load == 0).sum().item()),
+                        "max_load_violation": routing.max_load_violation,
+                    }
+                    if diagnostics
+                    else {}
+                )
         state.add(ffn_output)
         return (
             auxiliary_loss,
@@ -755,7 +776,7 @@ class K3MiniForCausalLM(nn.Module):
     def parameter_counts(self) -> dict[str, int]:
         total = sum(parameter.numel() for parameter in self.parameters())
         routed_total = sum(
-            module.gate_weight.numel() + module.up_weight.numel() + module.down_weight.numel()
+            module.gate_up_weight.numel() + module.down_weight.numel()
             for module in self.modules()
             if isinstance(module, StackedRoutedExperts)
         )
@@ -774,6 +795,13 @@ class K3MiniForCausalLM(nn.Module):
             load = module.last_load.float().clone()
             if dist.is_available() and dist.is_initialized() and isinstance(module, SoftmaxTopKRouter):
                 dist.all_reduce(load)
+            module.consecutive_dead_steps.copy_(
+                torch.where(
+                    load == 0,
+                    module.consecutive_dead_steps + 1,
+                    torch.zeros_like(module.consecutive_dead_steps),
+                )
+            )
             loads.append([int(value) for value in load.cpu().tolist()])
             probabilities = load / load.sum().clamp_min(1.0)
             nonzero = probabilities[probabilities > 0]

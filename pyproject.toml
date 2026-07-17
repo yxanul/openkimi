@@ -45,6 +45,9 @@ required-version = ">=0.8"
 megablocks = ["torch==2.7.0"]
 grouped-gemm = ["torch==2.7.0"]
 
+[tool.uv.extra-build-variables]
+grouped-gemm = { GROUPED_GEMM_CUTLASS = "1" }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

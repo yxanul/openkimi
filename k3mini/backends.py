@@ -71,7 +71,7 @@ def resolve_backend(requested: KernelBackend) -> BackendStatus:
             kda="fla.ops.kda.chunk_kda",
             short_conv="fla.modules.ShortConvolution",
             attnres="fla.ops.attnres.fused_attnres(checkpoint_level=1)",
-            expert_mlp="megablocks.grouped_gemm",
+            expert_mlp="megablocks.permute+device_counts+grouped_gemm",
             loss="fla.modules.FusedLinearCrossEntropyLoss",
         )
     return BackendStatus(
