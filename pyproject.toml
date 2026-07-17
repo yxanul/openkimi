@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 cuda = [
   "flash-linear-attention[cuda] @ git+https://github.com/fla-org/flash-linear-attention.git@ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "grouped-gemm==0.3.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "megablocks @ git+https://github.com/databricks/megablocks.git@952db33d6eac334d22c61e47a0d5d41446298784 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 

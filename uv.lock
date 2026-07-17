@@ -305,6 +305,12 @@ http = [
 ]
 
 [[package]]
+name = "grouped-gemm"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/90/d255544a8da444fdfab7287850316d2c7961003586a35d3042787982e66c/grouped_gemm-0.3.0.tar.gz", hash = "sha256:f0555da33a975610e9160f52449082c5e699525524581a0e5f990b14b02676a3", size = 981113, upload-time = "2025-05-29T18:25:38.913Z" }
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -422,6 +428,7 @@ dependencies = [
 [package.optional-dependencies]
 cuda = [
     { name = "flash-linear-attention", extra = ["cuda"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "grouped-gemm", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "megablocks", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
 
@@ -435,6 +442,7 @@ dev = [
 requires-dist = [
     { name = "datasets", specifier = ">=4.0.0,<5" },
     { name = "flash-linear-attention", extras = ["cuda"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/fla-org/flash-linear-attention.git?rev=ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17" },
+    { name = "grouped-gemm", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", specifier = "==0.3.0" },
     { name = "huggingface-hub", specifier = ">=0.33.0,<2" },
     { name = "megablocks", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/databricks/megablocks.git?rev=952db33d6eac334d22c61e47a0d5d41446298784" },
     { name = "numpy", specifier = ">=1.26,<3" },
@@ -1168,7 +1176,6 @@ version = "0.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
-    { name = "colorama", marker = "python_version < '0'" },
     { name = "rich" },
     { name = "shellingham" },
 ]
