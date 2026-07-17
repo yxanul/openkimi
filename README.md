@@ -185,6 +185,13 @@ but it was slower and changes the global batch; batch 72 OOMed at the fused-loss
 boundary. Full measurements are in
 [`profiles/h100-sm90-max-batch-2026-07-17.json`](profiles/h100-sm90-max-batch-2026-07-17.json).
 
+The same batch-64 layout was also tested with `torch.compile`: it sustained 74,080
+tokens/second versus 74,093 eager, a statistically neutral `-0.02%` change. Raising Dynamo's
+specialization budget enough to avoid the AttnRes state recompile limit produced 74,026
+tokens/second and did not improve the result. The fused external kernels already dominate this
+profile, so eager remains the default. A reproducible compiled configuration is provided at
+[`configs/h100-batch64-compiled.json`](configs/h100-batch64-compiled.json).
+
 GPU parity tests are opt-in:
 
 ```bash

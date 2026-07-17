@@ -1,6 +1,6 @@
 {
   "date": "2026-07-17",
-  "source_commit": "7b1c6b907b263fa5aa2c9fc5b5cba6ef103c0f07",
+  "source_commit": "020563a376861d52bea46df40aeda47e6c45167a",
   "hardware": {
     "gpu": "NVIDIA H100 80GB HBM3",
     "memory_mib": 81559,
@@ -131,6 +131,38 @@
     "optimizer_updates_completed": true,
     "checkpoint_completed": true
   },
+  "torch_compile_comparison": {
+    "layout": {
+      "microbatch_sequences": 64,
+      "sequence_length": 4096,
+      "gradient_accumulation_steps": 1,
+      "tokens_per_update": 262144
+    },
+    "mode": "torch.compile default",
+    "first_compile_update_tokens_per_second": 3890.173891145531,
+    "steady_state_tokens_per_second": [
+      74059.51557194136,
+      74090.2585610257,
+      74104.78863929106,
+      74064.46791335149
+    ],
+    "steady_state_mean_tokens_per_second": 74079.7576714024,
+    "eager_mean_tokens_per_second": 74093.158485289,
+    "change_from_eager_percent": -0.0180864389648705,
+    "wall_seconds_for_five_updates": 96.66,
+    "inductor_cache_kib": 332,
+    "recompile_limit_hit": true,
+    "recompile_reason": "BlockAttnResState changes partial between Tensor and None and grows the completed source list across layers",
+    "specialization_limit_probe": {
+      "recompile_limit": 64,
+      "recompile_limit_hit": false,
+      "steady_state_mean_tokens_per_second": 74026.23975362586,
+      "change_from_eager_percent": -0.09031701850908957,
+      "wall_seconds_for_five_updates": 96.85,
+      "inductor_cache_kib": 340
+    },
+    "conclusion": "Compilation is stable but provides no measurable throughput improvement because the step is dominated by external fused FLA, MegaBlocks, and fused-loss kernels."
+  },
   "absolute_capacity_probe": {
     "allocator": "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True",
     "largest_successful_microbatch_sequences": 71,
@@ -148,6 +180,7 @@
     "Optimizer-update timings include forward, backward, gradient clipping, AdamW, and zeroing gradients.",
     "Timings exclude dataset streaming, tokenization, host-to-device copies, validation, and checkpoint I/O.",
     "The synchronized trainer run separately includes its synthetic DataLoader and host-to-device copies but excludes the one-time compilation update from the steady-state mean.",
+    "Both torch.compile runs completed all optimizer updates and wrote a final checkpoint.",
     "The fused 128K-vocabulary loss has a chunk-allocation boundary above microbatch 64."
   ]
 }
