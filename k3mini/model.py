@@ -614,7 +614,12 @@ class K3MiniBlock(nn.Module):
             return self.mixer(hidden)
 
         if checkpoint_sublayers:
-            attn_output = checkpoint(attention_step, *attn_sources, use_reentrant=False)
+            attn_output = checkpoint(
+                attention_step,
+                *attn_sources,
+                use_reentrant=False,
+                preserve_rng_state=False,
+            )
             attn_weights = None
         else:
             hidden, attn_weights = self.attn_read(
@@ -645,7 +650,12 @@ class K3MiniBlock(nn.Module):
                 result, step_routing = self.ffn(ffn_hidden, diagnostics=False)
                 return result, step_routing.auxiliary_loss, step_routing.z_loss
 
-            ffn_output, auxiliary_loss, z_loss = checkpoint(ffn_step, *ffn_sources, use_reentrant=False)
+            ffn_output, auxiliary_loss, z_loss = checkpoint(
+                ffn_step,
+                *ffn_sources,
+                use_reentrant=False,
+                preserve_rng_state=False,
+            )
             ffn_weights = None
             router_stats = {}
         else:
