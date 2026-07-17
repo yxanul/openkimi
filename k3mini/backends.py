@@ -5,7 +5,7 @@ from importlib.util import find_spec
 
 import torch
 
-from .config import KernelBackend, LossBackend
+from .config import KernelBackend, LinearPrecision, LossBackend
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +16,8 @@ class BackendStatus:
     short_conv: str
     attnres: str
     expert_mlp: str
+    linear_precision: LinearPrecision
+    dense_ffn: str
     loss_backend: LossBackend
     loss: str
 
@@ -27,6 +29,8 @@ class BackendStatus:
             "short_conv": self.short_conv,
             "attnres": self.attnres,
             "expert_mlp": self.expert_mlp,
+            "linear_precision": self.linear_precision.value,
+            "dense_ffn": self.dense_ffn,
             "loss_backend": self.loss_backend.value,
             "loss": self.loss,
         }
@@ -66,8 +70,10 @@ def _resolve_loss_backend(requested: LossBackend, kernel_backend: KernelBackend)
 def resolve_backend(
     requested: KernelBackend,
     loss_backend: LossBackend = LossBackend.AUTO,
+    linear_precision: LinearPrecision = LinearPrecision.BF16,
 ) -> BackendStatus:
     requested = KernelBackend(requested)
+    linear_precision = LinearPrecision(linear_precision)
     dependencies_ok, missing = _cuda_dependencies()
     if requested is KernelBackend.H100:
         if not _h100_capable():
@@ -85,6 +91,19 @@ def resolve_backend(
         selected = KernelBackend.REFERENCE
 
     selected_loss = _resolve_loss_backend(loss_backend, selected)
+    if linear_precision is LinearPrecision.FP8_CURRENT:
+        if selected is not KernelBackend.H100:
+            raise RuntimeError("linear_precision=fp8_current requires an NVIDIA SM90+ GPU")
+        if find_spec("transformer_engine") is None:
+            raise RuntimeError(
+                "linear_precision=fp8_current requires Transformer Engine 2.16; "
+                "install with `uv sync --extra cuda`"
+            )
+        if selected_loss is not LossBackend.LIGER:
+            raise RuntimeError(
+                "linear_precision=fp8_current requires loss_backend=liger "
+                "for the chunked FP8 LM head"
+            )
     if selected is KernelBackend.H100:
         loss_name = {
             LossBackend.TORCH: "torch.cross_entropy",
@@ -98,8 +117,18 @@ def resolve_backend(
             short_conv="fla.modules.ShortConvolution",
             attnres="fla.ops.attnres.fused_attnres(checkpoint_level=1)",
             expert_mlp="megablocks.permute+device_counts+grouped_gemm",
+            linear_precision=linear_precision,
+            dense_ffn=(
+                "transformer_engine.Linear(Float8CurrentScaling)"
+                if linear_precision is LinearPrecision.FP8_CURRENT
+                else "torch.nn.Linear(bf16 autocast)"
+            ),
             loss_backend=selected_loss,
-            loss=loss_name,
+            loss=(
+                "transformer_engine.BasicLinear(fp8_current)+liger_cross_entropy"
+                if linear_precision is LinearPrecision.FP8_CURRENT
+                else loss_name
+            ),
         )
     return BackendStatus(
         requested=requested,
@@ -108,6 +137,8 @@ def resolve_backend(
         short_conv="torch.depthwise_conv1d",
         attnres="torch.depth_softmax",
         expert_mlp="torch.expert_loop",
+        linear_precision=linear_precision,
+        dense_ffn="torch.nn.Linear",
         loss_backend=selected_loss,
         loss="torch.cross_entropy",
     )

@@ -70,7 +70,7 @@ def main() -> None:
     def optimizer_update() -> None:
         with _nvtx_range("forward"):
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                output = model(input_ids, labels)
+                output = model(input_ids, labels, is_first_microbatch=True)
         assert output.loss is not None
         with _nvtx_range("backward"):
             output.loss.backward()

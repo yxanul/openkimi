@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 from .backends import BackendStatus, resolve_backend
-from .config import KernelBackend, LossBackend, ModelConfig, RouterType
+from .config import KernelBackend, LinearPrecision, LossBackend, ModelConfig, RouterType
 
 
 @torch.compiler.disable
@@ -498,32 +498,75 @@ class LatentMoE(nn.Module):
     def __init__(self, cfg: ModelConfig, backend: BackendStatus) -> None:
         super().__init__()
         self.d_model = cfg.d_model
+        self.use_fp8_linears = cfg.linear_precision is LinearPrecision.FP8_CURRENT
         self.router: SoftmaxTopKRouter | SigmoidNoAuxTopKRouter
         if cfg.router_type is RouterType.SOFTMAX:
             self.router = SoftmaxTopKRouter(cfg, backend)
         else:
             self.router = SigmoidNoAuxTopKRouter(cfg, backend)
-        self.down_proj = nn.Linear(cfg.d_model, cfg.latent_dim, bias=False)
-        self.up_proj = nn.Linear(cfg.latent_dim, cfg.d_model, bias=False)
+        if self.use_fp8_linears:
+            from .fp8 import CurrentScalingLinear
+
+            self.down_proj = CurrentScalingLinear(cfg.d_model, cfg.latent_dim)
+            self.up_proj = CurrentScalingLinear(cfg.latent_dim, cfg.d_model)
+        else:
+            self.down_proj = nn.Linear(cfg.d_model, cfg.latent_dim, bias=False)
+            self.up_proj = nn.Linear(cfg.latent_dim, cfg.d_model, bias=False)
         self.routed_experts = StackedRoutedExperts(cfg, backend)
-        self.shared_experts = nn.ModuleList(
-            [SwiGLU(cfg.d_model, cfg.shared_ffn_dim, cfg.d_model) for _ in range(cfg.n_shared_experts)]
-        )
+        if self.use_fp8_linears:
+            from .fp8 import CurrentScalingSwiGLU
+
+            self.shared_experts = nn.ModuleList(
+                [
+                    CurrentScalingSwiGLU(cfg.d_model, cfg.shared_ffn_dim, cfg.d_model)
+                    for _ in range(cfg.n_shared_experts)
+                ]
+            )
+        else:
+            self.shared_experts = nn.ModuleList(
+                [
+                    SwiGLU(cfg.d_model, cfg.shared_ffn_dim, cfg.d_model)
+                    for _ in range(cfg.n_shared_experts)
+                ]
+            )
 
     def forward(
-        self, x: torch.Tensor, *, diagnostics: bool = False
+        self,
+        x: torch.Tensor,
+        *,
+        diagnostics: bool = False,
+        is_first_microbatch: bool | None = None,
     ) -> tuple[torch.Tensor, RouterOutput]:
         flat = x.flatten(0, 1)
         routing = self.router(flat, collect_diagnostics=diagnostics)
-        latent = self.down_proj(flat)
-        routed = self.up_proj(
-            self.routed_experts(
+        if self.use_fp8_linears:
+            latent = self.down_proj(flat, is_first_microbatch=is_first_microbatch)
+            routed_latent = self.routed_experts(
                 latent,
                 routing.indices,
                 routing.weights.to(latent.dtype),
             )
-        )
-        shared = sum((expert(flat) for expert in self.shared_experts), torch.zeros_like(flat))
+            routed = self.up_proj(
+                routed_latent,
+                is_first_microbatch=is_first_microbatch,
+            )
+            shared = sum(
+                (
+                    expert(flat, is_first_microbatch=is_first_microbatch)
+                    for expert in self.shared_experts
+                ),
+                torch.zeros_like(flat),
+            )
+        else:
+            latent = self.down_proj(flat)
+            routed = self.up_proj(
+                self.routed_experts(
+                    latent,
+                    routing.indices,
+                    routing.weights.to(latent.dtype),
+                )
+            )
+            shared = sum((expert(flat) for expert in self.shared_experts), torch.zeros_like(flat))
         return (routed + shared).view_as(x), routing
 
 
@@ -601,10 +644,19 @@ class K3MiniBlock(nn.Module):
         self.attn_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.ffn_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.is_dense = layer_idx == 0
-        self.ffn: SwiGLU | LatentMoE
-        self.ffn = (
-            SwiGLU(cfg.d_model, cfg.dense_ffn_dim, cfg.d_model) if self.is_dense else LatentMoE(cfg, backend)
-        )
+        self.use_fp8_linears = cfg.linear_precision is LinearPrecision.FP8_CURRENT
+        if self.is_dense and self.use_fp8_linears:
+            from .fp8 import CurrentScalingSwiGLU
+
+            self.ffn: nn.Module = CurrentScalingSwiGLU(
+                cfg.d_model,
+                cfg.dense_ffn_dim,
+                cfg.d_model,
+            )
+        elif self.is_dense:
+            self.ffn = SwiGLU(cfg.d_model, cfg.dense_ffn_dim, cfg.d_model)
+        else:
+            self.ffn = LatentMoE(cfg, backend)
 
     def forward(
         self,
@@ -612,6 +664,7 @@ class K3MiniBlock(nn.Module):
         *,
         diagnostics: bool,
         checkpoint_sublayers: bool,
+        is_first_microbatch: bool | None,
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
         attn_sources = state.sources()
 
@@ -654,18 +707,33 @@ class K3MiniBlock(nn.Module):
                     return_weights=False,
                 )
                 if self.is_dense:
-                    result = self.ffn(ffn_hidden)
+                    if self.use_fp8_linears:
+                        result = self.ffn(
+                            ffn_hidden,
+                            is_first_microbatch=is_first_microbatch,
+                        )
+                    else:
+                        result = self.ffn(ffn_hidden)
                     step_zero = ffn_hidden.new_zeros(())
                     return result, step_zero, step_zero
-                result, step_routing = self.ffn(ffn_hidden, diagnostics=False)
+                result, step_routing = self.ffn(
+                    ffn_hidden,
+                    diagnostics=False,
+                    is_first_microbatch=is_first_microbatch,
+                )
                 return result, step_routing.auxiliary_loss, step_routing.z_loss
 
-            ffn_output, auxiliary_loss, z_loss = checkpoint(
-                ffn_step,
-                *ffn_sources,
-                use_reentrant=False,
-                preserve_rng_state=False,
-            )
+            if self.use_fp8_linears:
+                from .fp8 import te_checkpoint
+
+                ffn_output, auxiliary_loss, z_loss = te_checkpoint(ffn_step, *ffn_sources)
+            else:
+                ffn_output, auxiliary_loss, z_loss = checkpoint(
+                    ffn_step,
+                    *ffn_sources,
+                    use_reentrant=False,
+                    preserve_rng_state=False,
+                )
             ffn_weights = None
             router_stats = {}
         else:
@@ -675,12 +743,22 @@ class K3MiniBlock(nn.Module):
                 return_weights=diagnostics,
             )
             if self.is_dense:
-                ffn_output = self.ffn(hidden)
+                if self.use_fp8_linears:
+                    ffn_output = self.ffn(
+                        hidden,
+                        is_first_microbatch=is_first_microbatch,
+                    )
+                else:
+                    ffn_output = self.ffn(hidden)
                 zero = hidden.new_zeros(())
                 auxiliary_loss, z_loss = zero, zero
                 router_stats = {}
             else:
-                ffn_output, routing = self.ffn(hidden, diagnostics=diagnostics)
+                ffn_output, routing = self.ffn(
+                    hidden,
+                    diagnostics=diagnostics,
+                    is_first_microbatch=is_first_microbatch,
+                )
                 auxiliary_loss, z_loss = routing.auxiliary_loss, routing.z_loss
                 router_stats = (
                     {
@@ -711,22 +789,35 @@ class K3MiniForCausalLM(nn.Module):
         super().__init__()
         cfg.validate()
         self.cfg = cfg
-        self.backend = resolve_backend(cfg.kernel_backend, cfg.loss_backend)
-        self.token_embedding = nn.Embedding(cfg.vocab_size, cfg.d_model)
+        self.backend = resolve_backend(
+            cfg.kernel_backend,
+            cfg.loss_backend,
+            cfg.linear_precision,
+        )
+        self.token_embedding = nn.Embedding(cfg.physical_vocab_size, cfg.d_model)
         self.layers = nn.ModuleList(
             [K3MiniBlock(cfg, layer_idx, self.backend) for layer_idx in range(cfg.n_layers)]
         )
         self.final_read = BlockAttnResRead(cfg.d_model, cfg.rms_norm_eps, self.backend)
         self.final_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
-        self.lm_head = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
-        if self.backend.loss_backend is LossBackend.LIGER:
+        self.lm_head = nn.Linear(cfg.d_model, cfg.physical_vocab_size, bias=False)
+        if cfg.linear_precision is LinearPrecision.FP8_CURRENT:
+            from .fp8 import (
+                CurrentScalingFusedLinearCrossEntropyLoss,
+                current_scaling_recipe,
+            )
+
+            self.loss_fn = CurrentScalingFusedLinearCrossEntropyLoss(cfg.vocab_size)
+            self.fp8_recipe: Any | None = current_scaling_recipe()
+        elif self.backend.loss_backend is LossBackend.LIGER:
             from liger_kernel.transformers import LigerFusedLinearCrossEntropyLoss
 
-            self.loss_fn: nn.Module | None = LigerFusedLinearCrossEntropyLoss(
+            self.loss_fn = LigerFusedLinearCrossEntropyLoss(
                 ignore_index=-100,
                 reduction="mean",
                 accum_dtype=torch.float32,
             )
+            self.fp8_recipe = None
         elif self.backend.loss_backend is LossBackend.FLA:
             from fla.modules import FusedLinearCrossEntropyLoss
 
@@ -735,8 +826,10 @@ class K3MiniForCausalLM(nn.Module):
                 num_chunks=8,
                 accumulate_grad_in_fp32=True,
             )
+            self.fp8_recipe = None
         else:
             self.loss_fn = None
+            self.fp8_recipe = None
         self.apply(self._init_weights)
         if cfg.tie_embeddings:
             self.lm_head.weight = self.token_embedding.weight
@@ -749,6 +842,14 @@ class K3MiniForCausalLM(nn.Module):
     def _lm_loss(
         self, hidden: torch.Tensor, labels: torch.Tensor, return_logits: bool
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        if self.cfg.linear_precision is LinearPrecision.FP8_CURRENT and not return_logits:
+            assert self.loss_fn is not None
+            return _run_external_fused_loss(
+                self.loss_fn,
+                self.lm_head.weight,
+                hidden,
+                labels,
+            ), None
         if self.backend.loss_backend is LossBackend.LIGER and not return_logits:
             assert self.loss_fn is not None
             return _run_external_fused_loss(
@@ -760,7 +861,7 @@ class K3MiniForCausalLM(nn.Module):
         if self.backend.loss_backend is LossBackend.FLA and not return_logits:
             assert self.loss_fn is not None
             return self.loss_fn(hidden, labels, self.lm_head.weight), None
-        logits = self.lm_head(hidden)
+        logits = self.lm_head(hidden)[..., : self.cfg.vocab_size]
         loss = F.cross_entropy(logits.flatten(0, 1), labels.flatten(), ignore_index=-100)
         return loss, logits if return_logits else None
 
@@ -771,6 +872,35 @@ class K3MiniForCausalLM(nn.Module):
         *,
         return_logits: bool = False,
         return_diagnostics: bool = False,
+        is_first_microbatch: bool | None = None,
+    ) -> ModelOutput:
+        if self.cfg.linear_precision is LinearPrecision.FP8_CURRENT:
+            import transformer_engine.pytorch as te
+
+            with te.autocast(enabled=True, recipe=self.fp8_recipe):
+                return self._forward_impl(
+                    input_ids,
+                    labels,
+                    return_logits=return_logits,
+                    return_diagnostics=return_diagnostics,
+                    is_first_microbatch=is_first_microbatch,
+                )
+        return self._forward_impl(
+            input_ids,
+            labels,
+            return_logits=return_logits,
+            return_diagnostics=return_diagnostics,
+            is_first_microbatch=is_first_microbatch,
+        )
+
+    def _forward_impl(
+        self,
+        input_ids: torch.Tensor,
+        labels: torch.Tensor | None,
+        *,
+        return_logits: bool,
+        return_diagnostics: bool,
+        is_first_microbatch: bool | None,
     ) -> ModelOutput:
         embedding = self.token_embedding(input_ids)
         if self.backend.selected is KernelBackend.H100:
@@ -795,6 +925,7 @@ class K3MiniForCausalLM(nn.Module):
                 state,
                 diagnostics=return_diagnostics,
                 checkpoint_sublayers=use_checkpoint,
+                is_first_microbatch=is_first_microbatch,
             )
             aux_losses.append(aux)
             z_losses.append(z_loss)
@@ -810,7 +941,11 @@ class K3MiniForCausalLM(nn.Module):
         router_aux = torch.stack(aux_losses).mean() if aux_losses else zero
         router_z = torch.stack(z_losses).mean() if z_losses else zero
         lm_loss: torch.Tensor | None = None
-        logits: torch.Tensor | None = self.lm_head(hidden) if return_logits and labels is None else None
+        logits: torch.Tensor | None = (
+            self.lm_head(hidden)[..., : self.cfg.vocab_size]
+            if return_logits and labels is None
+            else None
+        )
         total_loss: torch.Tensor | None = None
         if labels is not None:
             lm_loss, logits = self._lm_loss(hidden, labels, return_logits)

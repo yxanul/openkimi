@@ -33,7 +33,8 @@ is zero-initialized.
 | NoPE MLA | PyTorch SDPA | SDPA FlashAttention backend |
 | Block AttnRes | readable depth softmax | FLA fused AttnRes + output RMSNorm, checkpoint level 1 |
 | Routed expert MLP | Python expert loop over stacked weights | MegaBlocks permutation + CUDA-count CUTLASS grouped GEMM + fused weighted SwiGLU |
-| LM loss | PyTorch cross-entropy | FLA fused linear cross-entropy; full 128K logits are omitted |
+| Dense/shared FFNs | PyTorch SwiGLU | BF16 default or TE 2.16 `Float8CurrentScaling`; gate/up share one FP8 GEMM |
+| LM loss | PyTorch cross-entropy | Liger BF16 default or chunked TE Current Scaling FP8 + Liger CE; full 128K logits are omitted |
 | Router | softmax top-4 with balance/z losses; sigmoid no-aux ablation | same |
 
 The default softmax router uses a `0.01` load-balancing coefficient and `0.001` z-loss coefficient.
@@ -69,6 +70,8 @@ The CUDA extra pins these inspected revisions:
 
 - `fla-org/flash-linear-attention@ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17`
 - `databricks/megablocks@952db33d6eac334d22c61e47a0d5d41446298784`
+- `linkedin/Liger-Kernel@72a4ed47a5c593b58045a0af14d3f774a037bd92`
+- `transformer-engine[pytorch]==2.16.0`
 
 `uv` supplies Torch as an explicit build dependency for MegaBlocks and `grouped_gemm`, and sets
 `GROUPED_GEMM_CUTLASS=1` specifically for the latter so expert counts can remain CUDA-resident.
@@ -128,6 +131,8 @@ resume rejects a changed world size or revision.
 
 - DDP over one to eight H100s; no expert parallelism.
 - BF16 autocast with FP32 parameters and AdamW state; TF32 enabled.
+- Optional TE Current Scaling FP8 for eligible dense/latent FFN and LM-head GEMMs; attention,
+  routers, routed experts, parameters, and optimizer state remain BF16/FP32 as appropriate.
 - Activation recomputation for AttnRes/mixer and AttnRes/FFN sublayers.
 - AdamW: LR `3e-4`, betas `(0.9, 0.95)`, epsilon `1e-8`, weight decay `0.1`, clip `1.0`.
 - No weight decay on norms, biases, KDA decay parameters, or router correction state.
@@ -170,11 +175,10 @@ forward/backward latency. This is batch one at 4,096 context with one forward/ba
 activation checkpointing, no gradient accumulation, and no `torch.compile`; AdamW and data loading
 are excluded.
 
-The KDA, AttnRes, and routed-MoE components can each be captured by a CUDA Graph. Full-step capture
-is not enabled because both the pinned FLA and Liger fused linear cross-entropy paths compute the
-non-ignored target count through a host scalar read. Keeping the memory-efficient 128K loss is
-preferable to silently falling back to materialized logits; graphing the complete train step
-therefore remains gated on a capture-safe fused-loss patch and DDP/optimizer replay tests.
+The KDA, AttnRes, and routed-MoE components can each be captured by a CUDA Graph. The default BF16
+Liger loss computes the non-ignored target count through a host scalar read. The FP8 Current
+Scaling loss avoids that read because this data pipeline emits fixed, unpadded samples, but a full
+train-step CUDA Graph is still disabled pending DDP and optimizer replay tests.
 
 For one H100, the measured maximum-throughput layout for the planned 262,144-token global batch is
 64 sequences per 4,096-token microstep with one accumulation step. The CUDA-synchronized training
@@ -221,6 +225,23 @@ the isolated comparisons are reproducible with
 [`scripts/benchmark_loss_backends.py`](scripts/benchmark_loss_backends.py) and
 [`scripts/benchmark_expert_backends.py`](scripts/benchmark_expert_backends.py).
 
+The opt-in [`configs/h100-fp8-current.json`](configs/h100-fp8-current.json) profile uses
+Transformer Engine 2.16's `Float8CurrentScaling` HYBRID recipe for the dense first FFN, shared
+FFNs, LatentMoE compression/expansion projections, and chunked LM head. KDA, MLA, routing, and
+MegaBlocks experts stay in BF16/FP32. Current Scaling has no delayed scale or amax-history state;
+it computes the current tensor maximum during each quantization. The tied vocabulary is physically
+padded from 128,001 to 128,016 rows for FP8 GEMM alignment, while the CE kernel sees only the
+logical 128,001 classes and padded rows receive zero gradient.
+
+At batch 64 × context 4,096 with accumulation 1, this profile measured 115,548 tokens/second
+versus 83,000 for the same-environment BF16/Liger control: `+39.2%` throughput and `-28.2%`
+latency, with peak allocation moving only from 35.06GiB to 35.14GiB. `torch.compile` measured
+115,422 tokens/second (`-0.1%`) and remains disabled. Nsight attributes 9.2% of GPU time to CE,
+11.3% to the two largest KDA backward kernels, about 9.4% to the main AttnRes kernels, and 7.0%
+to all Current Scaling quantization work; the fresh tensor-max scan itself is 1.9%. Full results
+are in
+[`profiles/h100-sm90-fp8-current-2026-07-17.json`](profiles/h100-sm90-fp8-current-2026-07-17.json).
+
 GPU parity tests are opt-in:
 
 ```bash
@@ -228,10 +249,11 @@ K3MINI_RUN_GPU_TESTS=1 uv run pytest -m gpu
 ```
 
 They compare FLA KDA and AttnRes outputs/gradients to the reference implementation, compare Liger
-and FLA fused-loss outputs/gradients, and compare grouped-GEMM experts against the reference loop,
-including an empty expert and a heavily loaded expert. The target relative-error tolerance is
-`5e-3` in BF16. The optimized path must pass these tests and appear in the backend report before a
-real run starts.
+and FLA fused-loss outputs/gradients, compare the Current Scaling FP8 loss to a BF16 reference,
+verify zero gradients for padded vocabulary rows, and compare grouped-GEMM experts against the
+reference loop, including an empty expert and a heavily loaded expert. The BF16 target
+relative-error tolerance is `5e-3`; FP8 tests use format-appropriate tolerances. The optimized path
+must pass these tests and appear in the backend report before a real run starts.
 
 FlashKDA is intentionally not a training dependency: its inspected backend is forward-only and
 inference-only. FlashQLA is not substituted for KDA because it implements scalar-gated Gated
@@ -248,6 +270,7 @@ demonstrating an end-to-end speedup.
 - [FLA fused AttnRes](https://github.com/fla-org/flash-linear-attention/blob/main/fla/ops/attnres/fused.py)
 - [Liger fused linear cross-entropy](https://github.com/linkedin/Liger-Kernel/blob/72a4ed47a5c593b58045a0af14d3f774a037bd92/src/liger_kernel/ops/fused_linear_cross_entropy.py)
 - [Transformer Engine 2.16 GroupedLinear](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/pytorch.html)
+- [Transformer Engine FP8 Current Scaling](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/features/low_precision_training/fp8_current_scaling/fp8_current_scaling.html)
 - [Moonshot FlashKDA](https://github.com/MoonshotAI/FlashKDA)
 - [Qwen FlashQLA](https://github.com/QwenLM/FlashQLA)
 - [SuperBPE 128K tokenizer](https://huggingface.co/alisawuffles/superbpe-tokenizer-128k)

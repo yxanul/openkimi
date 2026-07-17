@@ -1,0 +1,146 @@
+{
+  "date": "2026-07-17",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "driver": "595.58.03",
+    "torch": "2.7.0+cu126",
+    "cuda_toolkit": "12.6",
+    "transformer_engine": "2.16.0"
+  },
+  "conditions": {
+    "microbatch_sequences": 64,
+    "sequence_length": 4096,
+    "gradient_accumulation_steps": 1,
+    "tokens_per_update": 262144,
+    "activation_checkpointing": true,
+    "optimizer": "AdamW with FP32 parameters and states",
+    "input": "static synthetic CUDA tensors",
+    "routed_experts": "MegaBlocks BF16 grouped GEMM",
+    "attention": "BF16 KDA and NoPE MLA",
+    "router": "FP32 logits and probabilities",
+    "fp8_modules": [
+      "dense first FFN with combined gate/up projection",
+      "LatentMoE compression and expansion projections",
+      "shared FFNs with combined gate/up projection",
+      "chunked tied LM head"
+    ],
+    "recipe": {
+      "name": "Transformer Engine Float8CurrentScaling",
+      "format": "HYBRID: E4M3 forward and E5M2 backward",
+      "fp8_dpa": false,
+      "fp8_mha": false,
+      "persistent_amax_history": false,
+      "note": "Current Scaling has no delayed scale or amax-history state. It computes the current tensor max during each quantization."
+    }
+  },
+  "logical_vocabulary": {
+    "tokenizer_vocab_size": 128001,
+    "physical_embedding_rows": 128016,
+    "padding_multiple": 16,
+    "dummy_rows": 15,
+    "loss_semantics": "The Liger CE kernel receives n_cols=128001 and padded dlogits are zeroed, so dummy rows do not enter the softmax or receive LM-head gradients.",
+    "public_logits_shape": 128001,
+    "embedding_tied_to_lm_head": true
+  },
+  "same_environment_cuda_event": {
+    "bf16_liger": {
+      "elapsed_ms": 3158.36376953125,
+      "tokens_per_second": 82999.93893322372,
+      "peak_allocated_gib": 35.06031322479248,
+      "peak_reserved_gib": 37.84765625
+    },
+    "fp8_current": {
+      "elapsed_ms": 2268.697998046875,
+      "tokens_per_second": 115548.21321554482,
+      "peak_allocated_gib": 35.13681983947754,
+      "peak_reserved_gib": 38.01953125
+    },
+    "latency_reduction_percent": 28.168565637276643,
+    "throughput_increase_percent": 39.21481714403103,
+    "peak_allocated_increase_gib": 0.0765066146850586
+  },
+  "torch_compile": {
+    "eager_tokens_per_second": 115548.21321554482,
+    "compiled_tokens_per_second": 115421.80625027143,
+    "throughput_change_percent": -0.10939759409138716,
+    "compiled_peak_allocated_gib": 35.136088371276855,
+    "decision": "Keep eager as the default. Dynamo reached its recompile limit on mutable AttnRes state and produced no throughput benefit."
+  },
+  "nsight_systems": {
+    "version": "2024.5.1",
+    "elapsed_ms": 2280.046142578125,
+    "tokens_per_second": 114973.11177377531,
+    "gpu_kernel_time_ms": 2260.621699,
+    "gpu_kernel_time_over_elapsed_percent": 99.1480693844365,
+    "kernel_launches": 8859,
+    "trace_file_on_test_host": "profiles/h100-fp8-current-2026-07-17.nsys-rep",
+    "top_kernels": [
+      {
+        "name": "liger_cross_entropy_kernel",
+        "instances": 128,
+        "milliseconds": 208.349878,
+        "percent_of_gpu_kernel_time": 9.21648137667534
+      },
+      {
+        "name": "chunk_kda_bwd_kernel_intra",
+        "instances": 12,
+        "milliseconds": 143.482691,
+        "percent_of_gpu_kernel_time": 6.346159461285041
+      },
+      {
+        "name": "BF16 residual vector add",
+        "instances": 361,
+        "milliseconds": 136.851515,
+        "percent_of_gpu_kernel_time": 6.053710959326536
+      },
+      {
+        "name": "chunk_kda_bwd_kernel_wy_dqkg_fused",
+        "instances": 12,
+        "milliseconds": 112.093177,
+        "percent_of_gpu_kernel_time": 4.958510574013387
+      },
+      {
+        "name": "attnres_bwd_kernel_dv",
+        "instances": 33,
+        "milliseconds": 86.729056,
+        "percent_of_gpu_kernel_time": 3.836500815514161
+      },
+      {
+        "name": "attnres_fwd_kernel",
+        "instances": 65,
+        "milliseconds": 86.446922,
+        "percent_of_gpu_kernel_time": 3.8240204073975195
+      }
+    ],
+    "current_scaling_quantization_kernels": {
+      "current_amax_scan_ms": 42.768,
+      "cast_and_cast_transpose_ms": 114.495,
+      "scale_and_zero_ms": 1.288,
+      "combined_ms": 158.551,
+      "combined_percent_of_gpu_kernel_time": 7.013625281193092
+    },
+    "remaining_bottlenecks": [
+      "The CE reduction is the largest single kernel at 9.2% of GPU time.",
+      "The two largest KDA backward kernels total 255.6ms, or 11.3% of GPU time.",
+      "The main AttnRes forward and backward kernels total 213.6ms, or 9.4% of GPU time.",
+      "Current Scaling quantization is measurable at about 7.0%, but its fresh max scan alone is only about 1.9%."
+    ]
+  },
+  "acceptance": {
+    "macos": "17 passed, 10 platform-gated skips",
+    "h100": "complete test suite passed with only non-H100 platform skips",
+    "fp8_loss": "Loss and gradients compared to a BF16 logical-vocabulary reference; padded rows had exactly zero gradient.",
+    "activation_checkpointing": "Full H100 model forward/backward passed with Transformer Engine checkpoint recomputation.",
+    "backend_report": {
+      "dense_ffn": "transformer_engine.Linear(Float8CurrentScaling)",
+      "expert_mlp": "megablocks.permute+device_counts+grouped_gemm",
+      "loss": "transformer_engine.BasicLinear(fp8_current)+liger_cross_entropy"
+    }
+  },
+  "decision": [
+    "Use configs/h100-fp8-current.json as the fastest measured one-H100 primary profile.",
+    "Keep attention, routing, routed experts, reductions, parameters, and AdamW state out of FP8.",
+    "Keep MegaBlocks for routed experts because TE 2.16 GroupedLinear regressed the full H100 step.",
+    "Keep torch.compile disabled by default because it was neutral and hit mutable-state recompilations."
+  ]
+}

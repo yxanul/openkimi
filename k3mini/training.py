@@ -263,7 +263,11 @@ def train(
             labels = batch["labels"].to(context.device, non_blocking=True)
             sync = model.no_sync() if context.distributed and micro_step < grad_accum - 1 else nullcontext()
             with sync, _autocast_context(context.device, train_cfg.precision):
-                output: ModelOutput = model(input_ids, labels)
+                output: ModelOutput = model(
+                    input_ids,
+                    labels,
+                    is_first_microbatch=micro_step == 0,
+                )
                 assert output.loss is not None and output.lm_loss is not None
                 loss = output.loss / grad_accum
             loss.backward()

@@ -7,9 +7,10 @@ import torch
 import torch.nn.functional as F
 
 from k3mini.backends import resolve_backend
-from k3mini.config import KernelBackend, ModelConfig
+from k3mini.config import KernelBackend, LinearPrecision, LossBackend, ModelConfig
 from k3mini.model import (
     BlockAttnResRead,
+    K3MiniForCausalLM,
     SoftmaxTopKRouter,
     StackedRoutedExperts,
     kda_recurrent_reference,
@@ -184,6 +185,70 @@ def test_liger_fused_linear_cross_entropy_gradient_parity() -> None:
     torch.testing.assert_close(loss_liger, loss_fla, atol=5e-3, rtol=5e-3)
     assert _relative_error(hidden_liger.grad, hidden_fla.grad) < 5e-3
     assert _relative_error(weight_liger.grad, weight_fla.grad) < 5e-3
+
+
+def test_current_scaling_fp8_loss_padding_and_gradient_parity() -> None:
+    from k3mini.fp8 import CurrentScalingFusedLinearCrossEntropyLoss
+
+    torch.manual_seed(654)
+    logical_vocab = 257
+    physical_vocab = 272
+    hidden_reference = torch.randn(
+        64,
+        128,
+        device="cuda",
+        dtype=torch.bfloat16,
+        requires_grad=True,
+    )
+    hidden_fp8 = hidden_reference.detach().clone().requires_grad_(True)
+    weight_reference = torch.randn(
+        physical_vocab,
+        128,
+        device="cuda",
+        dtype=torch.float32,
+        requires_grad=True,
+    )
+    weight_fp8 = weight_reference.detach().clone().requires_grad_(True)
+    labels = torch.randint(logical_vocab, (64,), device="cuda")
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        reference_logits = F.linear(hidden_reference, weight_reference)[:, :logical_vocab]
+        reference_loss = F.cross_entropy(reference_logits, labels)
+        fp8_loss = CurrentScalingFusedLinearCrossEntropyLoss(logical_vocab)(
+            weight_fp8,
+            hidden_fp8,
+            labels,
+        )
+    reference_loss.backward()
+    fp8_loss.backward()
+    torch.testing.assert_close(fp8_loss, reference_loss, atol=7e-2, rtol=2e-2)
+    assert _relative_error(hidden_fp8.grad, hidden_reference.grad) < 0.2
+    assert _relative_error(
+        weight_fp8.grad[:logical_vocab],
+        weight_reference.grad[:logical_vocab],
+    ) < 0.2
+    assert torch.count_nonzero(weight_fp8.grad[logical_vocab:]) == 0
+
+
+def test_full_model_selects_current_scaling_without_amax_history() -> None:
+    cfg = _kernel_config()
+    cfg.kernel_backend = KernelBackend.H100
+    cfg.loss_backend = LossBackend.LIGER
+    cfg.linear_precision = LinearPrecision.FP8_CURRENT
+    cfg.activation_checkpointing = True
+    model = K3MiniForCausalLM(cfg).cuda()
+    tokens = torch.randint(cfg.vocab_size, (1, 16), device="cuda")
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        output = model(tokens, tokens, is_first_microbatch=True)
+    assert output.loss is not None and torch.isfinite(output.loss)
+    output.loss.backward()
+    assert model.token_embedding.weight.grad is not None
+    assert model.token_embedding.num_embeddings == 272
+    assert model.backend.linear_precision is LinearPrecision.FP8_CURRENT
+    assert model.fp8_recipe.__class__.__name__ == "Float8CurrentScaling"
+    assert not any("amax_history" in name for name, _ in model.named_buffers())
+    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+        logits = model(tokens, return_logits=True).logits
+    assert logits is not None and logits.shape[-1] == cfg.vocab_size
 
 
 def test_router_device_histogram_parity() -> None:

@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
 import torch
 
-from .config import ModelConfig
+from .config import LinearPrecision, ModelConfig
 from .model import K3MiniForCausalLM, LatentMoE
 
 
@@ -53,6 +54,13 @@ def benchmark_full_step(
     input_ids = torch.randint(cfg.vocab_size, (batch_size, sequence_length), device=device)
     labels = torch.randint(cfg.vocab_size, (batch_size, sequence_length), device=device)
 
+    def fp8_context():
+        if cfg.linear_precision is LinearPrecision.FP8_CURRENT:
+            import transformer_engine.pytorch as te
+
+            return te.autocast(enabled=True, recipe=model.fp8_recipe)
+        return nullcontext()
+
     def step() -> None:
         model.zero_grad(set_to_none=True)
         with torch.autocast(
@@ -60,7 +68,7 @@ def benchmark_full_step(
             dtype=torch.bfloat16,
             enabled=device.type == "cuda",
         ):
-            output = model(input_ids, labels)
+            output = model(input_ids, labels, is_first_microbatch=True)
         assert output.loss is not None
         output.loss.backward()
 
@@ -80,7 +88,7 @@ def benchmark_full_step(
             device_type=device.type,
             dtype=torch.bfloat16,
             enabled=device.type == "cuda",
-        ):
+        ), fp8_context():
             component_output = module(hidden)
             if isinstance(component_output, tuple):
                 component_output = component_output[0]

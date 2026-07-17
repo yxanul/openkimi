@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import copy
 
+import pytest
 import torch
 
 from k3mini.backends import resolve_backend
-from k3mini.config import KernelBackend, load_config
+from k3mini.config import KernelBackend, LinearPrecision, ModelConfig, load_config
 from k3mini.model import (
     BlockAttnResRead,
     K3MiniForCausalLM,
@@ -91,6 +92,20 @@ def test_primary_parameter_count_and_tied_embeddings() -> None:
     assert 440_000_000 <= counts["total"] <= 450_000_000
     assert 175_000_000 <= counts["active_estimate"] <= 185_000_000
     assert cfg.tie_embeddings
+
+
+def test_fp8_current_configuration_pads_only_the_physical_vocabulary() -> None:
+    cfg = ModelConfig(linear_precision=LinearPrecision.FP8_CURRENT)
+    cfg.validate()
+    assert cfg.vocab_size == 128_001
+    assert cfg.physical_vocab_size == 128_016
+
+    reference_cfg = ModelConfig(
+        kernel_backend=KernelBackend.REFERENCE,
+        linear_precision=LinearPrecision.FP8_CURRENT,
+    )
+    with pytest.raises(ValueError, match="requires the H100"):
+        reference_cfg.validate()
 
 
 def test_full_optimizer_step_and_no_weight_decay_groups(tiny_model_config, tiny_train_config) -> None:

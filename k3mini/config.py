@@ -20,6 +20,11 @@ class LossBackend(StrEnum):
     LIGER = "liger"
 
 
+class LinearPrecision(StrEnum):
+    BF16 = "bf16"
+    FP8_CURRENT = "fp8_current"
+
+
 class RouterType(StrEnum):
     SOFTMAX = "softmax"
     SIGMOID_NOAUX = "sigmoid_noaux"
@@ -57,16 +62,24 @@ class ModelConfig:
     tie_embeddings: bool = True
     kernel_backend: KernelBackend = KernelBackend.AUTO
     loss_backend: LossBackend = LossBackend.AUTO
+    linear_precision: LinearPrecision = LinearPrecision.BF16
     activation_checkpointing: bool = True
 
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
         self.kernel_backend = KernelBackend(self.kernel_backend)
         self.loss_backend = LossBackend(self.loss_backend)
+        self.linear_precision = LinearPrecision(self.linear_precision)
 
     @property
     def is_primary_shape(self) -> bool:
         return self.d_model == 768 and self.n_heads == 6 and self.n_layers == 16
+
+    @property
+    def physical_vocab_size(self) -> int:
+        if self.linear_precision is LinearPrecision.FP8_CURRENT:
+            return ((self.vocab_size + 15) // 16) * 16
+        return self.vocab_size
 
     def validate(self) -> None:
         if self.n_heads * self.kda_head_dim != self.d_model:
@@ -87,6 +100,23 @@ class ModelConfig:
             raise ValueError("router_topk_groups must be in [1, router_num_groups]")
         if self.kernel_backend is KernelBackend.H100 and self.kda_head_dim != 128:
             raise ValueError("the optimized H100 KDA profile requires kda_head_dim=128")
+        if self.linear_precision is LinearPrecision.FP8_CURRENT:
+            if self.kernel_backend is KernelBackend.REFERENCE:
+                raise ValueError("linear_precision=fp8_current requires the H100 kernel backend")
+            if not self.tie_embeddings:
+                raise ValueError("linear_precision=fp8_current currently requires tied embeddings")
+            fp8_dimensions = {
+                "d_model": self.d_model,
+                "latent_dim": self.latent_dim,
+                "dense_ffn_dim": self.dense_ffn_dim,
+                "shared_ffn_dim": self.shared_ffn_dim,
+            }
+            misaligned = [name for name, size in fp8_dimensions.items() if size % 16]
+            if misaligned:
+                raise ValueError(
+                    "linear_precision=fp8_current requires dimensions divisible by 16: "
+                    + ", ".join(misaligned)
+                )
         if self.dropout != 0:
             raise ValueError("the public-faithful profile uses zero dropout")
 
