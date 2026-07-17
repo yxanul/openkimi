@@ -1,0 +1,61 @@
+{
+  "date": "2026-07-17",
+  "source_commit": "eb75aa49606ad1263ecccd493e0ecd015cd872dd",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "compute_capability": "9.0",
+    "memory_mib": 81559,
+    "driver": "560.35.03",
+    "cuda_toolkit": "12.6",
+    "torch": "2.7.0+cu126"
+  },
+  "backend": {
+    "kda": "fla.ops.kda.chunk_kda",
+    "short_conv": "fla.modules.ShortConvolution",
+    "attnres": "fla.ops.attnres.fused_attnres(checkpoint_level=1)",
+    "expert_mlp": "megablocks.grouped_gemm",
+    "loss": "fla.modules.FusedLinearCrossEntropyLoss"
+  },
+  "acceptance": {
+    "gpu_tests_passed": 4,
+    "gpu_tests_failed": 0,
+    "smoke_optimizer_updates": 4,
+    "smoke_consumed_tokens": 1024,
+    "checkpoint_resume_exact": true,
+    "smoke_dead_experts": 0
+  },
+  "primary_model": {
+    "parameters_total": 543532104,
+    "parameters_active_estimate": 278111304,
+    "batch_size": 1,
+    "profiles": {
+      "sequence_512": {
+        "forward_backward_ms": 325.90216064453125,
+        "tokens_per_second": 1571.0236439900434,
+        "peak_allocated_bytes": 4730677248,
+        "component_forward_backward_ms": {
+          "kda": 6.220640182495117,
+          "latent_moe": 8.328341166178385,
+          "nope_mla": 1.6479786237080891,
+          "attnres_9_sources": 1.761130650838216
+        }
+      },
+      "sequence_4096": {
+        "forward_backward_ms": 365.9766845703125,
+        "tokens_per_second": 11191.969796679943,
+        "peak_allocated_bytes": 4901400576,
+        "component_forward_backward_ms": {
+          "kda": 6.019536018371582,
+          "latent_moe": 8.150735855102539,
+          "nope_mla": 1.2884800434112549,
+          "attnres_9_sources": 1.7121280431747437
+        }
+      }
+    }
+  },
+  "notes": [
+    "Timings exclude one-time Triton/Inductor compilation and autotuning.",
+    "Full-step timings cover model forward and backward, not AdamW optimizer update or data loading.",
+    "Peak memory is torch.cuda.max_memory_allocated for the benchmark process."
+  ]
+}

@@ -149,6 +149,12 @@ The report includes the selected KDA, short-convolution, AttnRes, expert, and lo
 step latency; tokens/second; peak CUDA memory; and forward/backward timings for KDA, MLA, LatentMoE,
 and nine-source AttnRes.
 
+The first verified H100 result is committed in
+[`profiles/h100-sm90-2026-07-17.json`](profiles/h100-sm90-2026-07-17.json). On one H100 80GB, the
+543M primary profile measured 366.0 ms and 11,192 tokens/s for a batch of one 4,096-token sequence,
+with 4.90GB peak allocated for model forward/backward. These numbers exclude compilation, optimizer,
+and data loading.
+
 GPU parity tests are opt-in:
 
 ```bash
