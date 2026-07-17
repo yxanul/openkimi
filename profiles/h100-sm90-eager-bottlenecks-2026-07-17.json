@@ -1,0 +1,141 @@
+{
+  "date": "2026-07-17",
+  "source_commit": "de2302293e2a00e7e9a3eb47e8e706f4e140470b",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "sm_count": 132,
+    "maximum_sm_clock_mhz": 1980,
+    "power_limit_watts": 700,
+    "theoretical_dense_bf16_tflops": 989,
+    "driver": "595.58.03",
+    "torch": "2.7.0+cu126"
+  },
+  "conditions": {
+    "torch_compile": false,
+    "microbatch_sequences": 64,
+    "sequence_length": 4096,
+    "gradient_accumulation_steps": 1,
+    "tokens_per_update": 262144,
+    "precision": "BF16 autocast with FP32 parameters and Adam states",
+    "activation_checkpointing": true,
+    "optimizer": "AdamW",
+    "input": "static synthetic CUDA tensors",
+    "warmup_updates": 2,
+    "profiled_updates": 1,
+    "backend": {
+      "kda": "fla.ops.kda.chunk_kda",
+      "short_conv": "fla.modules.ShortConvolution",
+      "attnres": "fla.ops.attnres.fused_attnres(checkpoint_level=1)",
+      "expert_mlp": "megablocks.permute+device_counts+grouped_gemm",
+      "loss": "fla.modules.FusedLinearCrossEntropyLoss"
+    }
+  },
+  "measurements": {
+    "nsight_systems": {
+      "version": "2024.5.1",
+      "elapsed_ms": 3543.3984375,
+      "tokens_per_second": 73980.95490072868,
+      "peak_allocated_gib": 42.40324258804321,
+      "peak_reserved_gib": 59.041015625,
+      "gpu_kernel_time_ms": 3529.824504,
+      "gpu_kernel_time_over_elapsed_percent": 99.61692706475643,
+      "kernel_launches": 6224
+    },
+    "torch_profiler_replication": {
+      "elapsed_ms": 3537.37841796875,
+      "tokens_per_second": 74106.85796814736,
+      "peak_allocated_gib": 42.40324258804321,
+      "peak_reserved_gib": 59.041015625
+    }
+  },
+  "kernel_time_breakdown": [
+    {
+      "category": "fused_linear_cross_entropy",
+      "milliseconds": 1674.157,
+      "percent_of_gpu_kernel_time": 47.429,
+      "included": "three chunked LM-head GEMM families, logsumexp, and cross-entropy kernels"
+    },
+    {
+      "category": "kda_core_conv_and_norm",
+      "milliseconds": 604.67,
+      "percent_of_gpu_kernel_time": 17.13,
+      "included": "KDA recurrence, KDA backward, short convolution, L2 normalization, gate, and output norm kernels"
+    },
+    {
+      "category": "generic_elementwise_and_copy",
+      "milliseconds": 372.036,
+      "percent_of_gpu_kernel_time": 10.54,
+      "included": "vectorized and unrolled elementwise kernels shared across model components"
+    },
+    {
+      "category": "identifiable_routed_moe",
+      "milliseconds": 281.333,
+      "percent_of_gpu_kernel_time": 7.97,
+      "included": "grouped GEMM, padding, weighted SwiGLU, and top-k kernels",
+      "note": "This is a lower bound because router and projection GEMMs also appear in the generic GEMM category."
+    },
+    {
+      "category": "generic_dense_gemm",
+      "milliseconds": 216.407,
+      "percent_of_gpu_kernel_time": 6.13,
+      "included": "nvjet GEMMs used by projections across KDA, MLA, FFNs, and routers"
+    },
+    {
+      "category": "fused_attnres",
+      "milliseconds": 213.345,
+      "percent_of_gpu_kernel_time": 6.04
+    },
+    {
+      "category": "mla_flash_attention",
+      "milliseconds": 99.518,
+      "percent_of_gpu_kernel_time": 2.82
+    },
+    {
+      "category": "adam_multi_tensor",
+      "milliseconds": 15.055,
+      "percent_of_gpu_kernel_time": 0.43
+    },
+    {
+      "category": "other",
+      "milliseconds": 53.303,
+      "percent_of_gpu_kernel_time": 1.51
+    }
+  ],
+  "fused_loss_detail": {
+    "bf16_cutlass_gemm_ms": [
+      489.09,
+      344.59
+    ],
+    "fp32_tf32_weight_gradient_gemm_ms": 404.037,
+    "logsumexp_ms": 373.427,
+    "cross_entropy_ms": 63.013,
+    "algorithmic_three_gemm_tflop": 154.620030615552,
+    "effective_tflops_over_complete_loss_region": 92.3569477746424,
+    "percent_of_dense_bf16_peak_if_all_operations_were_bf16": 9.33841736851794,
+    "precision_note": "FLA's default accumulate_grad_in_fp32=True explicitly accumulates the chunked LM-head weight gradient in FP32, so the dense BF16 peak is not the correct ceiling for the complete loss region."
+  },
+  "hardware_counter_means_percent": {
+    "async_compute_active": 99.71,
+    "sms_active": 97.86,
+    "sm_throughput": 32.23,
+    "sm_issue_active": 24.55,
+    "sm_tensor_pipe_active": 18.58,
+    "sm_warps_active": 29.04,
+    "active_sm_unused_warp_slots": 68.92,
+    "l1_throughput": 51.57,
+    "l2_bandwidth": 23.71,
+    "l2_bandwidth_to_device_memory": 35.52
+  },
+  "flop_context": {
+    "torch_profiler_recognized_tflop": 288.017419862016,
+    "recognized_tflops_per_second": 81.42115030695605,
+    "recognized_percent_of_dense_bf16_peak": 8.232674449641664,
+    "note": "This is a lower bound on algorithmic work because the profiler does not assign FLOP counts to the custom FLA and MegaBlocks kernels."
+  },
+  "conclusions": [
+    "The primary bottleneck is the fused 128K-vocabulary LM-head and cross-entropy path, not KDA or routed experts.",
+    "The GPU is continuously occupied, so input loading, host synchronization, and large idle gaps are not limiting this synthetic step.",
+    "Low tensor-pipe activity, low issue activity, and many unused warp slots show that theoretical dense BF16 peak is not attainable for this mixture of reductions, recurrent kernels, routing, copies, and narrow GEMMs.",
+    "The first optimization target should be the fused loss: test Hopper-native BF16 LM-head GEMMs, chunk count, and BF16 weight-gradient accumulation under numerical-parity checks before changing KDA."
+  ]
+}

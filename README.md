@@ -192,6 +192,15 @@ tokens/second and did not improve the result. The fused external kernels already
 profile, so eager remains the default. A reproducible compiled configuration is provided at
 [`configs/h100-batch64-compiled.json`](configs/h100-batch64-compiled.json).
 
+An eager Nsight Systems and GH100 hardware-counter capture at the same batch-64 layout attributes
+47.4% of GPU kernel time to the fused 128K-vocabulary LM-head/cross-entropy path, 17.1% to KDA
+including its convolution and fused norm/gate, 10.5% to generic elementwise/copy kernels, and at
+least 8.0% to routed MoE. The GPU is active 97.9% of the step, but tensor-pipe activity averages
+only 18.6% and SM throughput 32.2%; this is a low-occupancy mixed workload rather than a data-loader
+stall. See [`profiles/h100-sm90-eager-bottlenecks-2026-07-17.json`](profiles/h100-sm90-eager-bottlenecks-2026-07-17.json)
+for the complete kernel and counter breakdown. The capture can be reproduced with
+[`scripts/profile_h100_step.py`](scripts/profile_h100_step.py).
+
 GPU parity tests are opt-in:
 
 ```bash
