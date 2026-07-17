@@ -21,7 +21,7 @@
     "router_type": "softmax",
     "router_aux_loss_coefficient": 0.01,
     "router_z_loss_coefficient": 0.001,
-    "tie_embeddings": false,
+    "tie_embeddings": true,
     "kernel_backend": "h100",
     "activation_checkpointing": true
   },

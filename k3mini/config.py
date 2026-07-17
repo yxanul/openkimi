@@ -47,7 +47,7 @@ class ModelConfig:
     router_num_groups: int = 1
     router_topk_groups: int = 1
     dropout: float = 0.0
-    tie_embeddings: bool = False
+    tie_embeddings: bool = True
     kernel_backend: KernelBackend = KernelBackend.AUTO
     activation_checkpointing: bool = True
 

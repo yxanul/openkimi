@@ -18,7 +18,7 @@
     "n_shared_experts": 1,
     "shared_ffn_dim": 96,
     "router_type": "softmax",
-    "tie_embeddings": false,
+    "tie_embeddings": true,
     "kernel_backend": "reference",
     "activation_checkpointing": false
   },

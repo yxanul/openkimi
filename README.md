@@ -4,8 +4,8 @@ This repository implements a text-only, public-faithful approximation of the pic
 architecture. It composes the published Kimi Delta Attention (KDA), NoPE MLA, Block Attention
 Residuals, and LatentMoE designs without inventing the equations of unreleased K3 components.
 
-The primary JSON profile contains 543,532,104 total parameters and an estimated 278,111,304 active
-parameters per token. It has an untied 128,001-token embedding/head, width 768, 16 layers, a repeating
+The primary JSON profile contains 445,227,336 total parameters and an estimated 179,806,536 active
+parameters per token. It has a tied 128,001-token embedding/head, width 768, 16 layers, a repeating
 `KDA, KDA, KDA, NoPE MLA` schedule, and a dense first FFN followed by 15 LatentMoE FFNs.
 
 ```mermaid
@@ -16,7 +16,8 @@ flowchart BT
   B4 --> R["Repeat schedule 4× (16 transformer blocks)"]
   R --> A["Final Block AttnRes read over embedding + 8 completed blocks"]
   A --> N["RMSNorm"]
-  N --> H["Untied 128,001-token LM head"]
+  N --> H["Tied 128,001-token LM head"]
+  E -. "shared weights" .-> H
 ```
 
 Each attention and FFN output is one AttnRes sublayer. Four sublayers are summed into one AttnRes
@@ -149,11 +150,12 @@ The report includes the selected KDA, short-convolution, AttnRes, expert, and lo
 step latency; tokens/second; peak CUDA memory; and forward/backward timings for KDA, MLA, LatentMoE,
 and nine-source AttnRes.
 
-The first verified H100 result is committed in
+The first verified H100 result for the earlier untied 543M profile is committed in
 [`profiles/h100-sm90-2026-07-17.json`](profiles/h100-sm90-2026-07-17.json). On one H100 80GB, the
-543M primary profile measured 366.0 ms and 11,192 tokens/s for a batch of one 4,096-token sequence,
+untied profile measured 366.0 ms and 11,192 tokens/s for a batch of one 4,096-token sequence,
 with 4.90GB peak allocated for model forward/backward. These numbers exclude compilation, optimizer,
-and data loading.
+and data loading; the current tied profile removes one 98.3M-parameter vocabulary matrix and will be
+profiled separately.
 
 GPU parity tests are opt-in:
 

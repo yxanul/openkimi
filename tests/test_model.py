@@ -69,6 +69,7 @@ def test_attnres_zero_query_is_average_and_gradients(tiny_model_config) -> None:
 
 def test_architecture_schedule_topology_and_first_dense(tiny_model_config) -> None:
     model = K3MiniForCausalLM(tiny_model_config)
+    assert model.lm_head.weight is model.token_embedding.weight
     assert [layer.mixer_kind for layer in model.layers] == [
         "kda",
         "kda",
@@ -84,12 +85,12 @@ def test_architecture_schedule_topology_and_first_dense(tiny_model_config) -> No
     assert output.loss is not None and torch.isfinite(output.loss)
 
 
-def test_primary_parameter_count_and_untied_embeddings() -> None:
+def test_primary_parameter_count_and_tied_embeddings() -> None:
     cfg, _, _ = load_config("configs/primary.json")
     counts = estimate_parameter_counts(cfg)
-    assert 540_000_000 <= counts["total"] <= 550_000_000
-    assert 275_000_000 <= counts["active_estimate"] <= 285_000_000
-    assert not cfg.tie_embeddings
+    assert 440_000_000 <= counts["total"] <= 450_000_000
+    assert 175_000_000 <= counts["active_estimate"] <= 185_000_000
+    assert cfg.tie_embeddings
 
 
 def test_full_optimizer_step_and_no_weight_decay_groups(tiny_model_config, tiny_train_config) -> None:
