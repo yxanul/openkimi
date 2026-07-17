@@ -393,9 +393,12 @@ class StackedRoutedExperts(nn.Module):
             if token_pos.numel() == 0:
                 continue
             expert_input = latent.index_select(0, token_pos)
-            hidden = F.silu(F.linear(expert_input, self.gate_weight[expert_id]))
-            hidden = hidden * F.linear(expert_input, self.up_weight[expert_id])
-            expert_output = F.linear(hidden, self.down_weight[expert_id].transpose(0, 1))
+            gate_weight = self.gate_weight[expert_id].to(expert_input.dtype)
+            up_weight = self.up_weight[expert_id].to(expert_input.dtype)
+            down_weight = self.down_weight[expert_id].to(expert_input.dtype)
+            hidden = F.silu(F.linear(expert_input, gate_weight))
+            hidden = hidden * F.linear(expert_input, up_weight)
+            expert_output = F.linear(hidden, down_weight.transpose(0, 1))
             output.index_add_(0, token_pos, expert_output * weights[token_pos, slot_pos].unsqueeze(-1))
         return output
 

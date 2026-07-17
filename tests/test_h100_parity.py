@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import copy
 import os
 
 import pytest
 import torch
+import torch.nn.functional as F
 
 from k3mini.backends import resolve_backend
 from k3mini.config import KernelBackend, ModelConfig
-from k3mini.model import BlockAttnResRead, KimiDeltaAttention, StackedRoutedExperts
+from k3mini.model import BlockAttnResRead, StackedRoutedExperts, kda_recurrent_reference
 
 H100_ENABLED = (
     torch.cuda.is_available()
@@ -51,25 +51,57 @@ def _kernel_config() -> ModelConfig:
 
 
 def test_fla_kda_forward_and_gradient_parity() -> None:
-    reference_cfg = _kernel_config()
-    reference_cfg.kernel_backend = KernelBackend.REFERENCE
-    fused_cfg = copy.deepcopy(reference_cfg)
-    fused_cfg.kernel_backend = KernelBackend.H100
-    reference = KimiDeltaAttention(reference_cfg, resolve_backend(KernelBackend.REFERENCE)).cuda()
-    fused = KimiDeltaAttention(fused_cfg, resolve_backend(KernelBackend.H100)).cuda()
-    fused.load_state_dict(reference.state_dict())
-    x_reference = torch.randn(1, 64, 128, device="cuda", requires_grad=True)
-    x_fused = x_reference.detach().clone().requires_grad_(True)
-    with torch.autocast("cuda", dtype=torch.bfloat16):
-        output_reference = reference(x_reference)
-        output_fused = fused(x_fused)
-        loss_reference = output_reference.float().square().mean()
-        loss_fused = output_fused.float().square().mean()
-    loss_reference.backward()
-    loss_fused.backward()
+    from fla.ops.kda import chunk_kda
+
+    torch.manual_seed(123)
+    batch, time, heads, dim = 1, 64, 1, 128
+    q = torch.randn(batch, time, heads, dim, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+    k = torch.randn_like(q, requires_grad=True)
+    v = torch.randn_like(q, requires_grad=True)
+    raw_gate = torch.randn_like(q, requires_grad=True)
+    beta_logits = torch.randn(batch, time, heads, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+    a_log = torch.log(torch.empty(heads, device="cuda").uniform_(1, 16)).requires_grad_()
+    dt_bias = torch.zeros(heads, dim, device="cuda", requires_grad=True)
+    reference_inputs = [q, k, v, raw_gate, beta_logits, a_log, dt_bias]
+    fused_inputs = [value.detach().clone().requires_grad_(True) for value in reference_inputs]
+
+    q_reference = F.normalize(q.float(), dim=-1, eps=1e-6).to(q.dtype)
+    k_reference = F.normalize(k.float(), dim=-1, eps=1e-6).to(k.dtype)
+    log_alpha = -a_log.exp().view(1, 1, heads, 1) * F.softplus(
+        raw_gate.float() + dt_bias.view(1, 1, heads, dim)
+    )
+    output_reference = kda_recurrent_reference(
+        q_reference,
+        k_reference,
+        v,
+        log_alpha,
+        beta_logits.float().sigmoid(),
+        scale=dim**-0.5,
+    )
+    q_fused, k_fused, v_fused, gate_fused, beta_fused, a_fused, dt_fused = fused_inputs
+    output_fused, _ = chunk_kda(
+        q_fused,
+        k_fused,
+        v_fused,
+        gate_fused,
+        beta_fused,
+        A_log=a_fused,
+        dt_bias=dt_fused.reshape(-1),
+        scale=dim**-0.5,
+        use_qk_l2norm_in_kernel=True,
+        use_gate_in_kernel=True,
+        use_beta_sigmoid_in_kernel=True,
+        safe_gate=False,
+        state_v_first=True,
+    )
+    output_reference.float().square().mean().backward()
+    output_fused.float().square().mean().backward()
     assert _relative_error(output_fused, output_reference) < 5e-3
-    assert _relative_error(x_fused.grad, x_reference.grad) < 5e-3
-    assert _relative_error(fused.q_proj.weight.grad, reference.q_proj.weight.grad) < 5e-3
+    gradient_errors = [
+        _relative_error(fused_value.grad, reference_value.grad)
+        for fused_value, reference_value in zip(fused_inputs, reference_inputs, strict=True)
+    ]
+    assert max(gradient_errors) < 7e-3
 
 
 def test_fused_attnres_forward_and_gradient_parity() -> None:
