@@ -61,6 +61,7 @@ Linux/H100:
 ```bash
 uv sync --locked --extra cuda
 uv run k3-mini dry-run --config configs/primary.json --backend h100
+uv run k3-mini train --config configs/h100-smoke.json --synthetic
 ```
 
 The CUDA extra pins these inspected revisions:
