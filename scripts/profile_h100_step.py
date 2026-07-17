@@ -27,6 +27,11 @@ def main() -> None:
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--compile", action="store_true", help="compile the model with torch.compile")
     parser.add_argument(
+        "--transformer-engine-experts",
+        action="store_true",
+        help="replace MegaBlocks routed experts with experimental TE 2.16 GroupedLinear",
+    )
+    parser.add_argument(
         "--cuda-profiler-range",
         action="store_true",
         help="delimit the measured update with cudaProfilerStart/Stop for Nsight Systems",
@@ -45,6 +50,10 @@ def main() -> None:
     torch.backends.cudnn.allow_tf32 = True
     device = torch.device("cuda")
     raw_model = K3MiniForCausalLM(model_cfg).to(device).train()
+    if args.transformer_engine_experts:
+        from benchmark_expert_backends import replace_model_experts_with_transformer_engine
+
+        replace_model_experts_with_transformer_engine(raw_model, model_cfg)
     optimizer = build_optimizer(raw_model, train_cfg)
     model = torch.compile(raw_model) if args.compile else raw_model
     input_ids = torch.randint(
@@ -96,6 +105,7 @@ def main() -> None:
             {
                 "device": torch.cuda.get_device_name(),
                 "torch_compile": args.compile,
+                "transformer_engine_experts": args.transformer_engine_experts,
                 "microbatch_sequences": train_cfg.microbatch_sequences,
                 "sequence_length": data_cfg.sequence_length,
                 "gradient_accumulation_steps": train_cfg.gradient_accumulation(data_cfg, 1),

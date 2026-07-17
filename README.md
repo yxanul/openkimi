@@ -171,35 +171,55 @@ activation checkpointing, no gradient accumulation, and no `torch.compile`; Adam
 are excluded.
 
 The KDA, AttnRes, and routed-MoE components can each be captured by a CUDA Graph. Full-step capture
-is not enabled because the pinned FLA fused linear cross-entropy computes the non-ignored target
-count through a host scalar read. Keeping the memory-efficient 128K loss is preferable to silently
-falling back to materialized logits; graphing the complete train step therefore remains gated on a
-capture-safe fused-loss patch and DDP/optimizer replay tests.
+is not enabled because both the pinned FLA and Liger fused linear cross-entropy paths compute the
+non-ignored target count through a host scalar read. Keeping the memory-efficient 128K loss is
+preferable to silently falling back to materialized logits; graphing the complete train step
+therefore remains gated on a capture-safe fused-loss patch and DDP/optimizer replay tests.
 
 For one H100, the measured maximum-throughput layout for the planned 262,144-token global batch is
 64 sequences per 4,096-token microstep with one accumulation step. The CUDA-synchronized training
 entry point sustains 74,093 tokens/second over four post-compilation synthetic AdamW updates,
 without `torch.compile`; the isolated CUDA-event update harness measured a conservative 64,492
-tokens/second. The absolute capacity probe reached batch 71 with the expandable CUDA allocator,
-but it was slower and changes the global batch; batch 72 OOMed at the fused-loss allocation
-boundary. Full measurements are in
+tokens/second. The earlier FLA capacity probe reached batch 71 with the expandable CUDA allocator,
+but it was slower and changes the global batch; batch 72 OOMed at the FLA fused-loss allocation
+boundary. Full pre-Liger measurements are in
 [`profiles/h100-sm90-max-batch-2026-07-17.json`](profiles/h100-sm90-max-batch-2026-07-17.json).
 
-The same batch-64 layout was also tested with `torch.compile`: it sustained 74,080
-tokens/second versus 74,093 eager, a statistically neutral `-0.02%` change. Raising Dynamo's
-specialization budget enough to avoid the AttnRes state recompile limit produced 74,026
-tokens/second and did not improve the result. The fused external kernels already dominate this
-profile, so eager remains the default. A reproducible compiled configuration is provided at
+The same batch-64 layout was also tested with `torch.compile`. With the current Liger loss it
+measured 82,968 tokens/second versus 82,899 eager, a statistically neutral `+0.08%` change.
+Liger is kept behind an explicit compiler boundary; tracing its 128-chunk Python loop retained
+enough 128K-logit intermediates to OOM at 77.13GiB. The fused external kernels already dominate
+this profile, so eager remains the default. A reproducible compiled configuration is provided at
 [`configs/h100-batch64-compiled.json`](configs/h100-batch64-compiled.json).
 
-An eager Nsight Systems and GH100 hardware-counter capture at the same batch-64 layout attributes
-47.4% of GPU kernel time to the fused 128K-vocabulary LM-head/cross-entropy path, 17.1% to KDA
-including its convolution and fused norm/gate, 10.5% to generic elementwise/copy kernels, and at
-least 8.0% to routed MoE. The GPU is active 97.9% of the step, but tensor-pipe activity averages
-only 18.6% and SM throughput 32.2%; this is a low-occupancy mixed workload rather than a data-loader
-stall. See [`profiles/h100-sm90-eager-bottlenecks-2026-07-17.json`](profiles/h100-sm90-eager-bottlenecks-2026-07-17.json)
-for the complete kernel and counter breakdown. The capture can be reproduced with
+The earlier FLA eager Nsight Systems and GH100 hardware-counter capture at the same batch-64 layout
+attributes 47.4% of GPU kernel time to the fused 128K-vocabulary LM-head/cross-entropy path, 17.1%
+to KDA including its convolution and fused norm/gate, 10.5% to generic elementwise/copy kernels,
+and at least 8.0% to routed MoE. The GPU is active 97.9% of the step, but tensor-pipe activity
+averages only 18.6% and SM throughput 32.2%; this is a low-occupancy mixed workload rather than a
+data-loader stall. See
+[`profiles/h100-sm90-eager-bottlenecks-2026-07-17.json`](profiles/h100-sm90-eager-bottlenecks-2026-07-17.json)
+for the complete pre-Liger kernel and counter breakdown. The capture can be reproduced with
 [`scripts/profile_h100_step.py`](scripts/profile_h100_step.py).
+
+Replacing FLA's fused loss with the pinned
+[Liger fused linear cross-entropy](https://github.com/linkedin/Liger-Kernel/blob/72a4ed47a5c593b58045a0af14d3f774a037bd92/src/liger_kernel/ops/fused_linear_cross_entropy.py)
+reduced isolated loss latency by 20.9% and peak allocation by 88.7%. The full eager Nsight step
+improved from 73,981 to 82,739 tokens/second (`+11.8%`) while peak allocated memory fell from
+42.40GiB to 35.06GiB. Its three BF16 LM-head GEMM families plus in-place CE kernel now consume
+41.3% of GPU kernel time, so the 128K head remains the largest optimization target.
+
+Transformer Engine 2.16 GroupedLinear was also tested for the 64 routed experts. It was 7.2%
+faster than MegaBlocks in an isolated 1,048,576-row expert forward/backward, but the complete
+training step regressed from 82,899 to 51,614 tokens/second. On H100, TE 2.16 routes BF16
+GroupedLinear through its legacy host-split path; GPU-resident split offsets and CUDA-graph-safe
+grouped tensors require SM100+ and cuBLAS 13.3+. Kernel launches rose from 6,928 to 21,999 and GPU
+kernel time covered only 56.4% of wall time. MegaBlocks therefore remains the H100 default. Full
+loss, compiler, parity, TE, and Nsight results are recorded in
+[`profiles/h100-sm90-liger-te-evaluation-2026-07-17.json`](profiles/h100-sm90-liger-te-evaluation-2026-07-17.json);
+the isolated comparisons are reproducible with
+[`scripts/benchmark_loss_backends.py`](scripts/benchmark_loss_backends.py) and
+[`scripts/benchmark_expert_backends.py`](scripts/benchmark_expert_backends.py).
 
 GPU parity tests are opt-in:
 
@@ -207,10 +227,11 @@ GPU parity tests are opt-in:
 K3MINI_RUN_GPU_TESTS=1 uv run pytest -m gpu
 ```
 
-They compare FLA KDA and AttnRes outputs/gradients to the reference implementation and compare
-grouped-GEMM experts against the reference loop, including an empty expert and a heavily loaded
-expert. The target relative-error tolerance is `5e-3` in BF16. The optimized path must pass these
-tests and appear in the backend report before a real run starts.
+They compare FLA KDA and AttnRes outputs/gradients to the reference implementation, compare Liger
+and FLA fused-loss outputs/gradients, and compare grouped-GEMM experts against the reference loop,
+including an empty expert and a heavily loaded expert. The target relative-error tolerance is
+`5e-3` in BF16. The optimized path must pass these tests and appear in the backend report before a
+real run starts.
 
 FlashKDA is intentionally not a training dependency: its inspected backend is forward-only and
 inference-only. FlashQLA is not substituted for KDA because it implements scalar-gated Gated
@@ -225,6 +246,8 @@ demonstrating an end-to-end speedup.
 - [LatentMoE](https://arxiv.org/abs/2601.18089)
 - [Kimi K3 architecture post](https://www.kimi.com/blog/kimi-k3)
 - [FLA fused AttnRes](https://github.com/fla-org/flash-linear-attention/blob/main/fla/ops/attnres/fused.py)
+- [Liger fused linear cross-entropy](https://github.com/linkedin/Liger-Kernel/blob/72a4ed47a5c593b58045a0af14d3f774a037bd92/src/liger_kernel/ops/fused_linear_cross_entropy.py)
+- [Transformer Engine 2.16 GroupedLinear](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/pytorch.html)
 - [Moonshot FlashKDA](https://github.com/MoonshotAI/FlashKDA)
 - [Qwen FlashQLA](https://github.com/QwenLM/FlashQLA)
 - [SuperBPE 128K tokenizer](https://huggingface.co/alisawuffles/superbpe-tokenizer-128k)

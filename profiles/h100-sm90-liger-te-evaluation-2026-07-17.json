@@ -1,0 +1,171 @@
+{
+  "date": "2026-07-17",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "driver": "595.58.03",
+    "torch": "2.7.0+cu126",
+    "cuda_toolkit": "12.6"
+  },
+  "conditions": {
+    "microbatch_sequences": 64,
+    "sequence_length": 4096,
+    "gradient_accumulation_steps": 1,
+    "tokens_per_update": 262144,
+    "precision": "BF16 autocast with FP32 parameters and Adam states",
+    "activation_checkpointing": true,
+    "optimizer": "AdamW",
+    "input": "static synthetic CUDA tensors"
+  },
+  "liger_fused_loss": {
+    "source_revision": "72a4ed47a5c593b58045a0af14d3f774a037bd92",
+    "openkimi_source_commit": "50208b7a24fbc5f304757e3cec72b561eb6b741b",
+    "configuration": {
+      "reduction": "mean",
+      "ignore_index": -100,
+      "accum_dtype": "torch.float32",
+      "tokens": 262144,
+      "hidden_size": 768,
+      "vocab_size": 128001,
+      "derived_chunk_size": 2048,
+      "derived_chunks": 128
+    },
+    "isolated_loss_forward_and_backward": {
+      "fla": {
+        "median_ms": 1786.6936645507812,
+        "peak_allocated_gib": 25.233704090118408,
+        "loss": 123.08375549316406,
+        "hidden_grad_l2": 0.07390947639942169,
+        "weight_grad_l2": 0.07466693967580795
+      },
+      "liger": {
+        "median_ms": 1412.8255615234375,
+        "peak_allocated_gib": 2.8625569343566895,
+        "loss": 123.08375549316406,
+        "hidden_grad_l2": 0.07390798628330231,
+        "weight_grad_l2": 0.07466190308332443
+      },
+      "liger_latency_reduction_percent": 20.925137333004617,
+      "liger_peak_allocation_reduction_percent": 88.6558195176836
+    },
+    "h100_parity": {
+      "test": "tests/test_h100_parity.py::test_liger_fused_linear_cross_entropy_gradient_parity",
+      "status": "passed",
+      "tolerance": "5e-3 relative and absolute"
+    },
+    "full_eager_step_nsight": {
+      "fla_baseline": {
+        "elapsed_ms": 3543.3984375,
+        "tokens_per_second": 73980.95490072868,
+        "peak_allocated_gib": 42.40324258804321,
+        "peak_reserved_gib": 59.041015625,
+        "gpu_kernel_time_ms": 3529.824504,
+        "kernel_launches": 6224
+      },
+      "liger": {
+        "elapsed_ms": 3168.337890625,
+        "tokens_per_second": 82738.6500586553,
+        "peak_allocated_gib": 35.06031322479248,
+        "peak_reserved_gib": 37.84765625,
+        "gpu_kernel_time_ms": 3153.283249,
+        "kernel_launches": 6928
+      },
+      "latency_reduction_percent": 10.584769212113198,
+      "throughput_increase_percent": 11.837769828299894
+    },
+    "nsight_loss_core": {
+      "bf16_lm_head_gemm_ms": [
+        530.076311,
+        343.709136,
+        342.009932
+      ],
+      "liger_cross_entropy_kernel_ms": 85.503106,
+      "identifiable_core_ms": 1301.298485,
+      "percent_of_gpu_kernel_time": 41.26804927570906,
+      "note": "The core excludes generic add/copy/reduction kernels shared with other model components."
+    },
+    "hardware_counter_means_percent": {
+      "gr_active": 98.3170020775838,
+      "sms_active": 95.83019628515613,
+      "sm_issue": 25.76120189773326,
+      "tensor_active": 18.355235821265776,
+      "compute_warps_in_flight": 29.08524295326987,
+      "unallocated_warps_in_active_sms": 66.61701138019784,
+      "dram_read_bandwidth": 23.7196502217123,
+      "dram_write_bandwidth": 14.8205835839871
+    },
+    "torch_compile": {
+      "eager_elapsed_ms": 3162.223876953125,
+      "eager_tokens_per_second": 82898.62141341547,
+      "compiled_elapsed_ms": 3159.59033203125,
+      "compiled_tokens_per_second": 82967.7181065027,
+      "throughput_change_percent": 0.08335083492236883,
+      "compiler_boundary": "Liger custom autograd is kept outside Dynamo to avoid tracing the 128-chunk Python loop.",
+      "initial_unbounded_attempt": "OOM at 77.13 GiB PyTorch allocation before adding the compiler boundary."
+    }
+  },
+  "transformer_engine_grouped_linear": {
+    "version": "2.16.0",
+    "source_revision": "4220403e831d29e93868f7793693ea83f6b8b05b",
+    "status": "evaluated_not_selected",
+    "h100_source_constraint": {
+      "graph_safe_gpu_split_path": false,
+      "reason": "TE 2.16 gates GPU-resident split offsets and CUDA-graph-safe grouped tensors to SM100+ with cuBLAS 13.3+; H100 uses split_sizes.tolist() in the legacy path."
+    },
+    "pipeline": [
+      "TE index-map moe_permute",
+      "64-expert GroupedLinear 192->1024 with single grouped FP32 weight and BF16 autocast",
+      "TE fused SwiGLU",
+      "64-expert GroupedLinear 512->192 with single grouped FP32 weight and BF16 autocast",
+      "TE weighted moe_unpermute and top-4 reduction"
+    ],
+    "same_weight_relative_error": {
+      "output": 0.004499992821365595,
+      "latent_gradient": 0.005245300941169262,
+      "router_weight_gradient": 0.0040163807570934296,
+      "gate_up_weight_gradient": 0.004285155329853296,
+      "down_weight_gradient": 0.003592222696170211
+    },
+    "isolated_expert_forward_and_backward": {
+      "source_tokens": 262144,
+      "routed_rows": 1048576,
+      "megablocks_ms": 14.177568435668945,
+      "transformer_engine_ms": 13.163328170776367,
+      "transformer_engine_latency_reduction_percent": 7.153837905947813,
+      "megablocks_peak_allocated_gib": 5.701173782348633,
+      "transformer_engine_peak_allocated_gib": 7.215010643005371
+    },
+    "small_volume_counterexample": {
+      "source_tokens": 4096,
+      "routed_rows": 16384,
+      "megablocks_ms": 1.6486079692840576,
+      "transformer_engine_ms": 7.27950382232666
+    },
+    "full_step_cuda_event": {
+      "megablocks_elapsed_ms": 3162.223876953125,
+      "megablocks_tokens_per_second": 82898.62141341547,
+      "transformer_engine_elapsed_ms": 5078.95458984375,
+      "transformer_engine_tokens_per_second": 51613.77117334389,
+      "transformer_engine_throughput_change_percent": -37.73868576662333,
+      "transformer_engine_latency_change_percent": 60.61337803626474,
+      "megablocks_peak_allocated_gib": 35.06031322479248,
+      "transformer_engine_peak_allocated_gib": 35.20911693572998
+    },
+    "full_step_nsight": {
+      "transformer_engine_elapsed_ms": 5505.25927734375,
+      "transformer_engine_tokens_per_second": 47617.01253178446,
+      "transformer_engine_gpu_kernel_time_ms": 3102.702062,
+      "transformer_engine_gpu_kernel_time_over_elapsed_percent": 56.35887259241008,
+      "transformer_engine_kernel_launches": 21999,
+      "transformer_engine_cublas_gemm_submissions": 7680,
+      "megablocks_liger_gpu_kernel_time_over_elapsed_percent": 99.5248410319636,
+      "megablocks_liger_kernel_launches": 6928,
+      "conclusion": "TE slightly reduced GPU compute time but lost far more wall time to host-side submission and synchronization gaps."
+    }
+  },
+  "decision": [
+    "Use the pinned Liger fused linear cross entropy revision as the default explicit H100 loss backend.",
+    "Keep torch.compile disabled by default because its measured effect is statistically neutral.",
+    "Retain MegaBlocks grouped GEMM and fused weighted SwiGLU for H100 routed experts.",
+    "Revisit TE GroupedLinear on Blackwell or when its GPU-resident grouped-tensor path supports SM90."
+  ]
+}
