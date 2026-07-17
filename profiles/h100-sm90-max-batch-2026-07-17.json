@@ -1,0 +1,153 @@
+{
+  "date": "2026-07-17",
+  "source_commit": "7b1c6b907b263fa5aa2c9fc5b5cba6ef103c0f07",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "memory_mib": 81559,
+    "driver": "595.58.03",
+    "build_cuda_toolkit": "12.6",
+    "torch": "2.7.0+cu126"
+  },
+  "conditions": {
+    "parameters_total": 445227336,
+    "parameters_active_estimate": 179806536,
+    "sequence_length": 4096,
+    "global_batch_tokens": 262144,
+    "precision": "BF16 autocast with FP32 parameters and Adam states",
+    "activation_checkpointing": true,
+    "optimizer": "AdamW",
+    "gradient_clipping": 1.0,
+    "torch_compile": false,
+    "ddp": false,
+    "data_loading_included": false,
+    "input": "static synthetic CUDA tensors"
+  },
+  "forward_backward_capacity_sweep": [
+    {
+      "microbatch_sequences": 1,
+      "tokens": 4096,
+      "milliseconds": 221.19203186035156,
+      "tokens_per_second": 18517.846079491635,
+      "peak_allocated_gib": 7.316410064697266
+    },
+    {
+      "microbatch_sequences": 2,
+      "tokens": 8192,
+      "milliseconds": 277.2779846191406,
+      "tokens_per_second": 29544.357844537302,
+      "peak_allocated_gib": 7.755000591278076
+    },
+    {
+      "microbatch_sequences": 4,
+      "tokens": 16384,
+      "milliseconds": 365.1921691894531,
+      "tokens_per_second": 44864.05071709072,
+      "peak_allocated_gib": 8.78910779953003
+    },
+    {
+      "microbatch_sequences": 8,
+      "tokens": 32768,
+      "milliseconds": 574.1679077148438,
+      "tokens_per_second": 57070.41365375995,
+      "peak_allocated_gib": 11.085102081298828
+    },
+    {
+      "microbatch_sequences": 16,
+      "tokens": 65536,
+      "milliseconds": 1071.9395751953125,
+      "tokens_per_second": 61137.77447582251,
+      "peak_allocated_gib": 16.443419456481934
+    },
+    {
+      "microbatch_sequences": 32,
+      "tokens": 131072,
+      "milliseconds": 2080.6142578125,
+      "tokens_per_second": 62996.78064198477,
+      "peak_allocated_gib": 27.164076805114746
+    },
+    {
+      "microbatch_sequences": 64,
+      "tokens": 262144,
+      "milliseconds": 4063.462646484375,
+      "tokens_per_second": 64512.467027795035,
+      "peak_allocated_gib": 48.59562587738037,
+      "peak_reserved_gib": 68.794921875
+    }
+  ],
+  "complete_optimizer_update_sweep": [
+    {
+      "microbatch_sequences": 8,
+      "gradient_accumulation_steps": 8,
+      "optimizer_update_ms": 4470.080078125,
+      "training_tokens_per_second": 58644.139572094144,
+      "peak_allocated_gib": 13.531432151794434
+    },
+    {
+      "microbatch_sequences": 16,
+      "gradient_accumulation_steps": 4,
+      "optimizer_update_ms": 4261.638671875,
+      "training_tokens_per_second": 61512.48854813496,
+      "peak_allocated_gib": 19.66501522064209
+    },
+    {
+      "microbatch_sequences": 32,
+      "gradient_accumulation_steps": 2,
+      "optimizer_update_ms": 4158.1298828125,
+      "training_tokens_per_second": 63043.725758438675,
+      "peak_allocated_gib": 31.939017295837402
+    },
+    {
+      "microbatch_sequences": 64,
+      "gradient_accumulation_steps": 1,
+      "optimizer_update_ms": 4064.72119140625,
+      "training_tokens_per_second": 64492.492265947374,
+      "peak_allocated_gib": 42.41093397140503,
+      "peak_reserved_gib": 62.865234375
+    }
+  ],
+  "recommended_one_gpu_layout": {
+    "microbatch_sequences": 64,
+    "gradient_accumulation_steps": 1,
+    "tokens_per_update": 262144,
+    "synchronized_trainer_tokens_per_second": 74093.158485289,
+    "isolated_cuda_event_tokens_per_second": 64492.492265947374,
+    "reason": "Highest measured throughput while preserving the planned global batch"
+  },
+  "synchronized_trainer_run": {
+    "input": "synthetic CPU DataLoader batches copied by the normal training entry point",
+    "updates": 5,
+    "discarded_compile_update": {
+      "update": 1,
+      "tokens_per_second": 4020.165763240785
+    },
+    "steady_state_tokens_per_second": [
+      74131.82883562609,
+      74058.79373904188,
+      74108.79062356561,
+      74073.22074292238
+    ],
+    "steady_state_mean_tokens_per_second": 74093.158485289,
+    "cuda_synchronized_before_timing": true,
+    "optimizer_updates_completed": true,
+    "checkpoint_completed": true
+  },
+  "absolute_capacity_probe": {
+    "allocator": "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True",
+    "largest_successful_microbatch_sequences": 71,
+    "largest_successful_tokens_per_update": 290816,
+    "optimizer_update_ms": 4747.13525390625,
+    "training_tokens_per_second": 61261.36805575484,
+    "peak_allocated_gib": 67.35582685470581,
+    "peak_reserved_gib": 68.482421875,
+    "first_failed_microbatch_sequences": 72,
+    "failure": "CUDA OOM while attempting an additional 31.25 GiB allocation",
+    "note": "Batch 71 is a capacity result, not the throughput recommendation; it changes the global batch and is slower than batch 64."
+  },
+  "notes": [
+    "Adam moments were allocated before all capacity measurements.",
+    "Optimizer-update timings include forward, backward, gradient clipping, AdamW, and zeroing gradients.",
+    "Timings exclude dataset streaming, tokenization, host-to-device copies, validation, and checkpoint I/O.",
+    "The synchronized trainer run separately includes its synthetic DataLoader and host-to-device copies but excludes the one-time compilation update from the steady-state mean.",
+    "The fused 128K-vocabulary loss has a chunk-allocation boundary above microbatch 64."
+  ]
+}

@@ -176,6 +176,15 @@ count through a host scalar read. Keeping the memory-efficient 128K loss is pref
 falling back to materialized logits; graphing the complete train step therefore remains gated on a
 capture-safe fused-loss patch and DDP/optimizer replay tests.
 
+For one H100, the measured maximum-throughput layout for the planned 262,144-token global batch is
+64 sequences per 4,096-token microstep with one accumulation step. The CUDA-synchronized training
+entry point sustains 74,093 tokens/second over four post-compilation synthetic AdamW updates,
+without `torch.compile`; the isolated CUDA-event update harness measured a conservative 64,492
+tokens/second. The absolute capacity probe reached batch 71 with the expandable CUDA allocator,
+but it was slower and changes the global batch; batch 72 OOMed at the fused-loss allocation
+boundary. Full measurements are in
+[`profiles/h100-sm90-max-batch-2026-07-17.json`](profiles/h100-sm90-max-batch-2026-07-17.json).
+
 GPU parity tests are opt-in:
 
 ```bash
