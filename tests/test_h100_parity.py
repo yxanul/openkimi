@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from importlib.util import find_spec
 
 import pytest
 import torch
@@ -21,6 +22,7 @@ H100_ENABLED = (
     and torch.cuda.get_device_capability()[0] >= 9
     and os.environ.get("K3MINI_RUN_GPU_TESTS") == "1"
 )
+QUACK_ENABLED = find_spec("quack") is not None
 pytestmark = [
     pytest.mark.gpu,
     pytest.mark.skipif(
@@ -233,6 +235,135 @@ def test_current_scaling_fp8_loss_padding_and_gradient_parity(chunk_size: int) -
     assert torch.count_nonzero(weight_fp8.grad[logical_vocab:]) == 0
 
 
+@pytest.mark.skipif(not QUACK_ENABLED, reason="quack-kernels is not installed")
+def test_quack_cross_entropy_logical_vocabulary_and_edge_cases() -> None:
+    from k3mini.fp8 import _import_quack_cross_entropy_fwd_out
+
+    torch.manual_seed(260718)
+    logical_vocab = 257
+    physical_vocab = 272
+    row_count = 8
+    logical_logits = torch.randn(
+        row_count,
+        logical_vocab,
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    logical_logits[1].fill_(10)
+    logical_logits[2].fill_(-10)
+    logical_logits[3, 0] = 30
+    logical_logits[4, -1] = 30
+    labels = torch.tensor(
+        [0, logical_vocab - 1, 7, 0, logical_vocab - 1, 7, 7, -100],
+        device="cuda",
+    )
+
+    logits = torch.full(
+        (row_count, physical_vocab),
+        -torch.inf,
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    logits[:, :logical_vocab].copy_(logical_logits)
+    loss = torch.empty(row_count, device="cuda", dtype=torch.float32)
+    _import_quack_cross_entropy_fwd_out()(
+        logits,
+        labels,
+        None,
+        loss,
+        None,
+        logits,
+        None,
+        -100,
+    )
+
+    reference_logits = logical_logits.float().requires_grad_(True)
+    reference_loss = F.cross_entropy(
+        reference_logits,
+        labels,
+        reduction="none",
+        ignore_index=-100,
+    )
+    reference_loss.sum().backward()
+    torch.testing.assert_close(loss, reference_loss, atol=2e-3, rtol=2e-3)
+    torch.testing.assert_close(
+        logits[:, :logical_vocab],
+        reference_logits.grad.to(torch.bfloat16),
+        atol=2e-3,
+        rtol=2e-3,
+    )
+    assert torch.count_nonzero(logits[:, logical_vocab:]) == 0
+    assert loss[-1] == 0
+    assert torch.count_nonzero(logits[-1]) == 0
+
+
+@pytest.mark.skipif(not QUACK_ENABLED, reason="quack-kernels is not installed")
+def test_current_scaling_quack_mean_and_ignored_labels() -> None:
+    from k3mini.fp8 import CurrentScalingFusedLinearCrossEntropyLoss
+
+    torch.manual_seed(260719)
+    logical_vocab = 257
+    physical_vocab = 272
+    token_count = 64
+    hidden_dim = 128
+    hidden_reference = torch.randn(
+        token_count,
+        hidden_dim,
+        device="cuda",
+        dtype=torch.bfloat16,
+        requires_grad=True,
+    )
+    hidden_quack = hidden_reference.detach().clone().requires_grad_(True)
+    weight_reference = torch.randn(
+        physical_vocab,
+        hidden_dim,
+        device="cuda",
+        dtype=torch.float32,
+        requires_grad=True,
+    )
+    weight_quack = weight_reference.detach().clone().requires_grad_(True)
+    labels = torch.randint(logical_vocab, (token_count,), device="cuda")
+    labels[::5] = -100
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        reference_logits = F.linear(
+            hidden_reference,
+            weight_reference,
+        )[:, :logical_vocab]
+        reference_loss = F.cross_entropy(
+            reference_logits,
+            labels,
+            ignore_index=-100,
+        )
+        quack_loss = CurrentScalingFusedLinearCrossEntropyLoss(
+            logical_vocab,
+            chunk_size=32,
+            ce_backend="quack",
+        )(weight_quack, hidden_quack, labels)
+    reference_loss.backward()
+    quack_loss.backward()
+    torch.testing.assert_close(quack_loss, reference_loss, atol=7e-2, rtol=2e-2)
+    assert _relative_error(hidden_quack.grad, hidden_reference.grad) < 0.2
+    assert _relative_error(
+        weight_quack.grad[:logical_vocab],
+        weight_reference.grad[:logical_vocab],
+    ) < 0.2
+    assert torch.count_nonzero(weight_quack.grad[logical_vocab:]) == 0
+
+    hidden_ignored = hidden_quack.detach().clone().requires_grad_(True)
+    weight_ignored = weight_quack.detach().clone().requires_grad_(True)
+    all_ignored = torch.full_like(labels, -100)
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        ignored_loss = CurrentScalingFusedLinearCrossEntropyLoss(
+            logical_vocab,
+            chunk_size=32,
+            ce_backend="quack",
+        )(weight_ignored, hidden_ignored, all_ignored)
+    ignored_loss.backward()
+    assert torch.isfinite(ignored_loss) and ignored_loss == 0
+    assert torch.count_nonzero(hidden_ignored.grad) == 0
+    assert torch.count_nonzero(weight_ignored.grad) == 0
+
+
 def test_current_scaling_fp8_chunk_parity_at_model_shape() -> None:
     from k3mini.fp8 import CurrentScalingFusedLinearCrossEntropyLoss
 
@@ -255,13 +386,17 @@ def test_current_scaling_fp8_chunk_parity_at_model_shape() -> None:
     ) * 0.02
     labels = torch.randint(logical_vocab, (token_count,), device="cuda")
 
-    def run_fp8(chunk_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def run_fp8(
+        chunk_size: int,
+        ce_backend: str = "liger",
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden = base_hidden.detach().clone().requires_grad_(True)
         weight = base_weight.detach().clone().requires_grad_(True)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             loss = CurrentScalingFusedLinearCrossEntropyLoss(
                 logical_vocab,
                 chunk_size=chunk_size,
+                ce_backend=ce_backend,
             )(weight, hidden, labels)
         loss.backward()
         return loss.detach(), hidden.grad.detach(), weight.grad.detach()
@@ -299,6 +434,19 @@ def test_current_scaling_fp8_chunk_parity_at_model_shape() -> None:
     ) < 0.04
     assert torch.count_nonzero(weight_grad_2k[logical_vocab:]) == 0
     assert torch.count_nonzero(weight_grad_16k[logical_vocab:]) == 0
+    if QUACK_ENABLED:
+        for chunk_size in (2_048, 4_096, 8_192, 16_384):
+            loss_quack, hidden_grad_quack, weight_grad_quack = run_fp8(
+                chunk_size,
+                ce_backend="quack",
+            )
+            torch.testing.assert_close(loss_quack, loss_reference, atol=2e-3, rtol=2e-3)
+            assert _relative_error(hidden_grad_quack, hidden_reference.grad) < 0.04
+            assert _relative_error(
+                weight_grad_quack[:logical_vocab],
+                weight_reference.grad[:logical_vocab],
+            ) < 0.04
+            assert torch.count_nonzero(weight_grad_quack[logical_vocab:]) == 0
 
 
 def test_full_model_selects_current_scaling_without_amax_history() -> None:

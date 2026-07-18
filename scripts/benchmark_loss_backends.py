@@ -17,6 +17,7 @@ def _measure(
     weight: torch.Tensor,
     labels: torch.Tensor,
     *,
+    logical_vocab_size: int,
     warmup: int,
     repeats: int,
 ) -> dict[str, float | int | str]:
@@ -45,6 +46,9 @@ def _measure(
         "loss": loss_value,
         "hidden_grad_l2": float(hidden.grad.float().norm()),
         "weight_grad_l2": float(weight.grad.float().norm()),
+        "dummy_weight_grad_nonzero": int(
+            torch.count_nonzero(weight.grad[logical_vocab_size:])
+        ),
         "peak_allocated_gib": torch.cuda.max_memory_allocated() / 2**30,
         "peak_reserved_gib": torch.cuda.max_memory_reserved() / 2**30,
     }
@@ -57,7 +61,12 @@ def main() -> None:
     parser.add_argument("--vocab", type=int, default=128_001)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--provider", action="append", choices=("fla", "liger"))
+    parser.add_argument(
+        "--provider",
+        action="append",
+        choices=("fla", "liger", "fp8_liger", "fp8_quack"),
+    )
+    parser.add_argument("--chunk-size", type=int, default=16_384)
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -65,6 +74,8 @@ def main() -> None:
 
     from fla.modules import FusedLinearCrossEntropyLoss
     from liger_kernel.transformers import LigerFusedLinearCrossEntropyLoss
+
+    from k3mini.fp8 import CurrentScalingFusedLinearCrossEntropyLoss
 
     torch.manual_seed(1234)
     torch.cuda.manual_seed_all(1234)
@@ -76,8 +87,9 @@ def main() -> None:
         dtype=torch.bfloat16,
         requires_grad=True,
     )
+    physical_vocab = ((args.vocab + 15) // 16) * 16
     weight = torch.randn(
-        args.vocab,
+        physical_vocab,
         args.hidden,
         device="cuda",
         dtype=torch.float32,
@@ -95,10 +107,22 @@ def main() -> None:
         reduction="mean",
         accum_dtype=torch.float32,
     )
+    fp8_liger = CurrentScalingFusedLinearCrossEntropyLoss(
+        args.vocab,
+        chunk_size=args.chunk_size,
+        ce_backend="liger",
+    )
+    fp8_quack = CurrentScalingFusedLinearCrossEntropyLoss(
+        args.vocab,
+        chunk_size=args.chunk_size,
+        ce_backend="quack",
+    )
     providers = args.provider or ["fla", "liger"]
     functions = {
-        "fla": lambda x, w, y: fla(x, y, w),
-        "liger": lambda x, w, y: liger(w, x, y),
+        "fla": lambda x, w, y: fla(x, y, w[: args.vocab]),
+        "liger": lambda x, w, y: liger(w[: args.vocab], x, y),
+        "fp8_liger": lambda x, w, y: fp8_liger(w, x, y),
+        "fp8_quack": lambda x, w, y: fp8_quack(w, x, y),
     }
 
     liger_increase = math.ceil(args.vocab / args.hidden)
@@ -109,9 +133,12 @@ def main() -> None:
         "tokens": args.tokens,
         "hidden": args.hidden,
         "vocab": args.vocab,
+        "physical_vocab": physical_vocab,
         "fla_chunks": 8,
         "liger_chunk_size": liger_chunk_size,
         "liger_chunks": math.ceil(args.tokens / liger_chunk_size),
+        "fp8_chunk_size": args.chunk_size,
+        "fp8_chunks": math.ceil(args.tokens / args.chunk_size),
     }
     print(json.dumps(metadata))
     for provider in providers:
@@ -121,6 +148,7 @@ def main() -> None:
             hidden,
             weight,
             labels,
+            logical_vocab_size=args.vocab,
             warmup=args.warmup,
             repeats=args.repeats,
         )

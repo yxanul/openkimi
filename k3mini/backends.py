@@ -64,6 +64,11 @@ def _resolve_loss_backend(requested: LossBackend, kernel_backend: KernelBackend)
         raise RuntimeError(
             "loss_backend=liger requires liger-kernel; install with `uv sync --extra cuda`"
         )
+    if requested is LossBackend.QUACK and find_spec("quack") is None:
+        raise RuntimeError(
+            "loss_backend=quack requires quack-kernels 0.6.1 in a Python 3.12, "
+            "CUDA 12.9+ environment"
+        )
     return requested
 
 
@@ -99,16 +104,19 @@ def resolve_backend(
                 "linear_precision=fp8_current requires Transformer Engine 2.16; "
                 "install with `uv sync --extra cuda`"
             )
-        if selected_loss is not LossBackend.LIGER:
+        if selected_loss not in {LossBackend.LIGER, LossBackend.QUACK}:
             raise RuntimeError(
-                "linear_precision=fp8_current requires loss_backend=liger "
+                "linear_precision=fp8_current requires loss_backend=liger or quack "
                 "for the chunked FP8 LM head"
             )
+    elif selected_loss is LossBackend.QUACK:
+        raise RuntimeError("loss_backend=quack currently requires linear_precision=fp8_current")
     if selected is KernelBackend.H100:
         loss_name = {
             LossBackend.TORCH: "torch.cross_entropy",
             LossBackend.FLA: "fla.modules.FusedLinearCrossEntropyLoss",
             LossBackend.LIGER: "liger_kernel.LigerFusedLinearCrossEntropyLoss",
+            LossBackend.QUACK: "quack.cross_entropy_fwd_out",
         }[selected_loss]
         return BackendStatus(
             requested=requested,
@@ -125,7 +133,7 @@ def resolve_backend(
             ),
             loss_backend=selected_loss,
             loss=(
-                "transformer_engine.BasicLinear(fp8_current)+liger_cross_entropy"
+                f"transformer_engine.BasicLinear(fp8_current)+{selected_loss.value}_cross_entropy"
                 if linear_precision is LinearPrecision.FP8_CURRENT
                 else loss_name
             ),

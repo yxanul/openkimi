@@ -34,7 +34,7 @@ is zero-initialized.
 | Block AttnRes | readable depth softmax | FLA fused AttnRes + output RMSNorm, checkpoint level 1 |
 | Routed expert MLP | Python expert loop over stacked weights | MegaBlocks permutation + CUDA-count CUTLASS grouped GEMM + fused weighted SwiGLU |
 | Dense/shared FFNs | PyTorch SwiGLU | BF16 default or TE 2.16 `Float8CurrentScaling`; gate/up share one FP8 GEMM |
-| LM loss | PyTorch cross-entropy | Liger BF16 default or chunked TE Current Scaling FP8 + Liger CE; full 128K logits are omitted |
+| LM loss | PyTorch cross-entropy | Liger BF16 default or chunked TE Current Scaling FP8 + Liger/QuACK CE; full 128K logits are omitted |
 | Router | softmax top-4 with balance/z losses; sigmoid no-aux ablation | same |
 
 The default softmax router uses a `0.01` load-balancing coefficient and `0.001` z-loss coefficient.
@@ -78,6 +78,22 @@ The CUDA extra pins these inspected revisions:
 Both packages are guarded by Linux x86-64 markers and are not installed into the macOS environment.
 Record `nvidia-smi`, driver, CUDA toolkit, GPU model, and the successful backend report when the
 target SSH host is available.
+
+QuACK 0.6.1 requires Python 3.12 and a CUDA 12.9+ toolkit. Its CUDA-13 CuTe DSL dependencies are
+kept in an isolated target so they cannot perturb the locked Torch/FLA/MegaBlocks environment:
+
+```bash
+scripts/install_quack_isolated.sh
+scripts/run_with_quack.sh \
+  env K3MINI_RUN_GPU_TESTS=1 .venv/bin/pytest -m gpu tests/test_h100_parity.py
+scripts/run_with_quack.sh \
+  .venv/bin/python scripts/profile_h100_step.py \
+    --config configs/h100-fp8-current-quack.json --warmup 2 --repeats 5
+```
+
+The installer uses exact package versions and `uv pip --target --no-deps`. This is deliberately
+different from asking `uv` to resolve QuACK's CUDA-13 extra inside the training environment; the
+upstream README warns that dependency installation order matters for that path.
 
 ## Configuration and commands
 
@@ -242,18 +258,30 @@ to all Current Scaling quantization work; the fresh tensor-max scan itself is 1.
 are in
 [`profiles/h100-sm90-fp8-current-2026-07-17.json`](profiles/h100-sm90-fp8-current-2026-07-17.json).
 
+At the tuned 16,384-row FP8 LM-head chunk, replacing only Liger's CE reduction with QuACK 0.6.1
+reduced isolated LM-head/loss forward+backward latency from 210.7 to 134.0 ms (`-36.4%`). The full
+microbatch-32, accumulation-2 AdamW update improved from 127,843 to 137,911 tokens/second (`+7.88%`)
+with essentially unchanged peak allocation. An Nsight capture measured 47.76 ms in 16 QuACK CE
+kernels versus 201.52 ms in 16 Liger CE kernels. Loss and FP8 hidden/tied-weight gradients match
+the BF16 reference within the same tolerances as Liger, ignored labels behave correctly, and all
+15 physical padding rows receive exact-zero gradient. The selected opt-in profile is
+[`configs/h100-fp8-current-quack.json`](configs/h100-fp8-current-quack.json), and complete
+measurements are in
+[`profiles/h100-sm90-quack-ce-2026-07-18.json`](profiles/h100-sm90-quack-ce-2026-07-18.json).
+
 GPU parity tests are opt-in:
 
 ```bash
 K3MINI_RUN_GPU_TESTS=1 uv run pytest -m gpu
 ```
 
-They compare FLA KDA and AttnRes outputs/gradients to the reference implementation, compare Liger
-and FLA fused-loss outputs/gradients, compare the Current Scaling FP8 loss to a BF16 reference,
-verify zero gradients for padded vocabulary rows, and compare grouped-GEMM experts against the
-reference loop, including an empty expert and a heavily loaded expert. The BF16 target
-relative-error tolerance is `5e-3`; FP8 tests use format-appropriate tolerances. The optimized path
-must pass these tests and appear in the backend report before a real run starts.
+They compare FLA KDA and AttnRes outputs/gradients to the reference implementation, compare Liger,
+QuACK, and FLA loss outputs/gradients, compare the Current Scaling FP8 loss to a BF16 reference,
+exercise QuACK at 2K/4K/8K/16K chunks plus ignored and all-ignored labels, verify zero gradients for
+padded vocabulary rows, and compare grouped-GEMM experts against the reference loop, including an
+empty expert and a heavily loaded expert. The BF16 target relative-error tolerance is `5e-3`; FP8
+tests use format-appropriate tolerances. The optimized path must pass these tests and appear in the
+backend report before a real run starts.
 
 FlashKDA is intentionally not a training dependency: its inspected backend is forward-only and
 inference-only. FlashQLA is not substituted for KDA because it implements scalar-gated Gated
@@ -269,6 +297,7 @@ demonstrating an end-to-end speedup.
 - [Kimi K3 architecture post](https://www.kimi.com/blog/kimi-k3)
 - [FLA fused AttnRes](https://github.com/fla-org/flash-linear-attention/blob/main/fla/ops/attnres/fused.py)
 - [Liger fused linear cross-entropy](https://github.com/linkedin/Liger-Kernel/blob/72a4ed47a5c593b58045a0af14d3f774a037bd92/src/liger_kernel/ops/fused_linear_cross_entropy.py)
+- [QuACK 0.6.1 cross-entropy](https://github.com/Dao-AILab/quack/blob/3a1c687a21e7d389c219b17aa448ea1c2f52d31a/quack/cross_entropy.py)
 - [Transformer Engine 2.16 GroupedLinear](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/pytorch.html)
 - [Transformer Engine FP8 Current Scaling](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/features/low_precision_training/fp8_current_scaling/fp8_current_scaling.html)
 - [Moonshot FlashKDA](https://github.com/MoonshotAI/FlashKDA)

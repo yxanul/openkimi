@@ -1,0 +1,323 @@
+{
+  "date": "2026-07-18",
+  "sources": {
+    "openkimi_parent_commit": "0b7ac3b12eee5f81e191d1c2dae4f01cf4cb0ca6",
+    "quack_release": "0.6.1",
+    "quack_inspected_commit": "3a1c687a21e7d389c219b17aa448ea1c2f52d31a",
+    "installed_cross_entropy_sha256": "ba5274bc815cacf6b6ed5be3331ede2b8ca1951f4f28e041d5ed1638e78fb34f",
+    "installed_source_matches_inspected_commit": true
+  },
+  "hardware": {
+    "host": "gpu-ubuntu-12cpu-240gb-fi-hel2",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "usable_gpu_memory_gib": 79.18,
+    "driver": "595.58.03",
+    "system_cuda": "13.2",
+    "torch": "2.7.0+cu126",
+    "python": "3.12.3",
+    "transformer_engine": "2.16.0",
+    "nsight_systems": "2025.6.3"
+  },
+  "quack_environment": {
+    "installation": "Isolated --target directory outside the locked OpenKimi environment",
+    "runner": "scripts/run_with_quack.sh",
+    "installer": "scripts/install_quack_isolated.sh",
+    "packages": {
+      "quack-kernels": "0.6.1",
+      "apache-tvm-ffi": "0.1.12",
+      "cuda-bindings": "12.9.2",
+      "cuda-pathfinder": "1.2.2",
+      "cuda-python": "12.9.0",
+      "nvidia-cuda-nvdisasm": "13.3.73",
+      "nvidia-cutlass-dsl": "4.6.0",
+      "nvidia-cutlass-dsl-libs-base": "4.6.0",
+      "nvidia-cutlass-dsl-libs-core": "4.6.0",
+      "nvidia-cutlass-dsl-libs-cu12": "4.6.0",
+      "nvidia-cutlass-dsl-libs-cu13": "4.6.0",
+      "protobuf": "6.33.6",
+      "torch-c-dlpack-ext": "0.1.5",
+      "einops": "0.8.2"
+    },
+    "torch_2_7_compatibility": "A temporary import-only sentinel supplies torch.float4_e2m1fn_x2, which QuACK references while importing FP4 utilities. The BF16 CE path never uses FP4."
+  },
+  "conditions": {
+    "sequence_length": 4096,
+    "global_batch_tokens": 262144,
+    "microbatch_sequences": 32,
+    "gradient_accumulation_steps": 2,
+    "checkpoint_attention": true,
+    "checkpoint_ffn": false,
+    "attnres_checkpoint_level": 1,
+    "fp8_lm_head_chunk_rows": 16384,
+    "chunks_per_update": 16,
+    "precision": "BF16 attention and routed experts with TE FP8 Current Scaling linears",
+    "comparison": "Identical TE Current Scaling LM-head projection, tensors, chunking, model, and optimizer; only CE provider differs",
+    "torch_compile": false,
+    "input": "Fixed-seed synthetic static-shape CUDA tensors",
+    "full_step_warmups": 2,
+    "full_step_measured_updates": 5
+  },
+  "logical_vocabulary": {
+    "logical_vocab_size": 128001,
+    "physical_vocab_size": 128016,
+    "dummy_rows": 15,
+    "semantics": "Physical-only logits are set to negative infinity before QuACK softmax and their in-place dlogits are explicitly zero before TE backward.",
+    "dummy_gradient_nonzero": 0
+  },
+  "isolated_fp8_lm_head_loss": {
+    "tokens": 131072,
+    "hidden_dim": 768,
+    "chunk_rows": 16384,
+    "warmups": 2,
+    "measured_iterations": 5,
+    "fp8_liger": {
+      "median_elapsed_ms": 210.7131805419922,
+      "minimum_elapsed_ms": 210.43959045410156,
+      "loss": 122.9189224243164,
+      "hidden_gradient_l2": 0.10461687296628952,
+      "weight_gradient_l2": 0.10481548309326172,
+      "dummy_gradient_nonzero": 0,
+      "peak_allocated_gib": 9.1978178024292,
+      "peak_reserved_gib": 13.1015625
+    },
+    "fp8_quack": {
+      "median_elapsed_ms": 133.98927307128906,
+      "minimum_elapsed_ms": 133.74652099609375,
+      "loss": 122.9189224243164,
+      "hidden_gradient_l2": 0.10461687296628952,
+      "weight_gradient_l2": 0.10481548309326172,
+      "dummy_gradient_nonzero": 0,
+      "peak_allocated_gib": 9.197818279266357,
+      "peak_reserved_gib": 13.103515625
+    },
+    "quack_latency_reduction_percent": 36.41153692381799
+  },
+  "model_shape_correctness": {
+    "tokens": 16384,
+    "hidden_dim": 768,
+    "logical_vocab_size": 128001,
+    "physical_vocab_size": 128016,
+    "tested_quack_chunks": [
+      2048,
+      4096,
+      8192,
+      16384
+    ],
+    "loss_bf16": 11.917613983154297,
+    "loss_liger_16k": 11.917728424072266,
+    "loss_quack_16k": 11.91772747039795,
+    "quack_loss_absolute_error_vs_bf16": 0.00011348724365234375,
+    "hidden_gradient_relative_error_quack_vs_bf16": 0.02667451836168766,
+    "weight_gradient_relative_error_quack_vs_bf16": 0.02655233070254326,
+    "hidden_gradient_relative_error_quack_vs_liger": 0.000006225703145901207,
+    "weight_gradient_relative_error_quack_vs_liger": 3.7744808878414915e-7,
+    "dummy_gradient_nonzero": 0,
+    "edge_cases": [
+      "random labels",
+      "ignore_index=-100",
+      "all labels ignored",
+      "repeated labels",
+      "boundary labels 0 and 128000",
+      "extreme positive and negative logits",
+      "partial final token chunk"
+    ]
+  },
+  "full_step_comparison": {
+    "fp8_liger_saved_config_control": {
+      "elapsed_samples_ms": [
+        2049.441162109375,
+        2050.5205078125,
+        2049.7138671875,
+        2050.9443359375,
+        2050.92626953125
+      ],
+      "median_elapsed_ms": 2050.5205078125,
+      "tokens_per_second": 127842.66190034637,
+      "peak_allocated_gib": 68.21694850921631,
+      "peak_reserved_gib": 69.18359375
+    },
+    "fp8_quack": {
+      "elapsed_samples_ms": [
+        1899.8328857421875,
+        1900.0142822265625,
+        1900.82470703125,
+        1901.5667724609375,
+        1901.343017578125
+      ],
+      "median_elapsed_ms": 1900.82470703125,
+      "tokens_per_second": 137910.6653182251,
+      "peak_allocated_gib": 68.20579481124878,
+      "peak_reserved_gib": 71.13671875
+    },
+    "quack_latency_reduction_percent": 7.300381123507867,
+    "quack_throughput_increase_percent": 7.875307941013272,
+    "peak_allocated_change_gib": -0.011153697967529297,
+    "combined_throughput_increase_vs_pre_checkpoint_baseline_percent": 18.68727769413181
+  },
+  "quack_chunk_sweep": [
+    {
+      "chunk_rows": 4096,
+      "chunks_per_update": 64,
+      "elapsed_samples_ms": [
+        1913.153564453125,
+        1913.47216796875,
+        1913.6259765625,
+        1913.220458984375,
+        1913.6259765625
+      ],
+      "median_elapsed_ms": 1913.47216796875,
+      "tokens_per_second": 136999.11835053208,
+      "peak_allocated_gib": 62.32073926925659,
+      "peak_reserved_gib": 64.9609375
+    },
+    {
+      "chunk_rows": 8192,
+      "chunks_per_update": 32,
+      "elapsed_samples_ms": [
+        1905.85546875,
+        1906.7982177734375,
+        1904.8997802734375,
+        1906.1112060546875,
+        1906.7830810546875
+      ],
+      "median_elapsed_ms": 1906.1112060546875,
+      "tokens_per_second": 137528.17735256467,
+      "peak_allocated_gib": 64.29243421554565,
+      "peak_reserved_gib": 66.798828125
+    },
+    {
+      "chunk_rows": 16384,
+      "chunks_per_update": 16,
+      "median_elapsed_ms": 1900.82470703125,
+      "tokens_per_second": 137910.6653182251,
+      "peak_allocated_gib": 68.20579481124878,
+      "peak_reserved_gib": 71.13671875,
+      "reserved_memory_headroom_gib": 8.04328125,
+      "throughput_increase_vs_8192_percent": 0.278116437999558
+    },
+    {
+      "chunk_rows": 32768,
+      "chunks_per_update": 8,
+      "result": "OOM during Transformer Engine FP8 LM-head backward",
+      "allocated_gib_before_failure": 72.09,
+      "reserved_unallocated_gib_before_failure": 0.998,
+      "failed_allocation_gib": 3.91
+    }
+  ],
+  "winner_stability": {
+    "elapsed_samples_ms": [
+      1903.16748046875,
+      1901.6510009765625,
+      1901.9317626953125,
+      1902.3336181640625,
+      1902.4986572265625,
+      1903.079345703125,
+      1902.6168212890625,
+      1902.0399169921875,
+      1902.9739990234375,
+      1903.400634765625
+    ],
+    "median_elapsed_ms": 1902.5577392578125,
+    "tokens_per_second": 137785.04304540178,
+    "peak_allocated_gib": 68.21694898605347,
+    "peak_reserved_gib": 69.18359375,
+    "result": "Ten consecutive measured AdamW updates completed with stable latency and finite state."
+  },
+  "nsight_systems": {
+    "quack_trace_file_on_test_host": "profiles/h100-quack-ce16k-2026-07-18.nsys-rep",
+    "profiled_elapsed_ms": 1910.0811767578125,
+    "profiled_tokens_per_second": 137242.3346002919,
+    "gpu_kernel_time_ms": 1887.598294,
+    "kernel_launches": 11205,
+    "quack_ce_launches": 16,
+    "quack_ce_kernel_time_ms": 47.757696,
+    "quack_ce_kernel_share_percent": 2.530076244548823,
+    "liger_control_gpu_kernel_time_ms": 2037.923693,
+    "liger_control_ce_launches": 16,
+    "liger_control_ce_kernel_time_ms": 201.518012,
+    "liger_control_ce_kernel_share_percent": 9.9,
+    "ce_kernel_time_reduction_percent": 76.30102860803244,
+    "top_remaining_kernels": [
+      {
+        "name": "chunk_kda_bwd_kernel_intra",
+        "launches": 24,
+        "milliseconds": 144.264,
+        "percent_of_gpu_kernel_time": 7.64
+      },
+      {
+        "name": "BF16 vector add",
+        "launches": 662,
+        "milliseconds": 123.638,
+        "percent_of_gpu_kernel_time": 6.55
+      },
+      {
+        "name": "chunk_kda_bwd_kernel_wy_dqkg_fused",
+        "launches": 24,
+        "milliseconds": 110.809,
+        "percent_of_gpu_kernel_time": 5.87
+      },
+      {
+        "name": "attnres_bwd_kernel_dv",
+        "launches": 66,
+        "milliseconds": 86.864,
+        "percent_of_gpu_kernel_time": 4.6
+      },
+      {
+        "name": "TE E5M2 cast_transpose_general",
+        "launches": 16,
+        "milliseconds": 70.61,
+        "percent_of_gpu_kernel_time": 3.74
+      },
+      {
+        "name": "attnres_fwd_kernel",
+        "launches": 98,
+        "milliseconds": 64.918,
+        "percent_of_gpu_kernel_time": 3.44
+      },
+      {
+        "name": "FlashAttention backward",
+        "launches": 8,
+        "milliseconds": 55.13,
+        "percent_of_gpu_kernel_time": 2.92
+      },
+      {
+        "name": "causal_conv1d_bwd_kernel",
+        "launches": 72,
+        "milliseconds": 50.398,
+        "percent_of_gpu_kernel_time": 2.67
+      },
+      {
+        "name": "QuACK CrossEntropy",
+        "launches": 16,
+        "milliseconds": 47.757696,
+        "percent_of_gpu_kernel_time": 2.53
+      }
+    ],
+    "remaining_bottlenecks": [
+      "The two largest KDA backward kernels now total 255.1 ms, or 13.5% of GPU kernel time.",
+      "BF16 residual/vector additions are the second-largest individual family at 123.6 ms, or 6.55%.",
+      "The main AttnRes forward and backward-dv kernels total 151.8 ms, or 8.0%, before its dq/dw backward.",
+      "QuACK CE is no longer the leading kernel; it accounts for 47.8 ms, or 2.53%."
+    ],
+    "note": "Large raw Nsight traces remain on the test host and are not committed."
+  },
+  "decision": {
+    "adopt": true,
+    "reason": "All parity checks passed; isolated loss improved by 36.4%, full-step throughput improved by 7.88%, and peak allocation did not increase.",
+    "config": "configs/h100-fp8-current-quack.json",
+    "expected_tokens_per_second": 137785.04304540178,
+    "next_experiment": "Evaluate SonicMoE's GPU-resident routed-expert bitmatrix path."
+  },
+  "verification": {
+    "macos_tests": "18 passed, 15 platform-gated skips",
+    "macos_ruff": "passed",
+    "macos_compileall": "passed",
+    "h100_gpu_tests": "13 passed",
+    "isolated_installer_smoke": "A fresh exact-pinned target installed and imported successfully through scripts/run_with_quack.sh.",
+    "backend_report": {
+      "linear_precision": "fp8_current",
+      "loss_backend": "quack",
+      "loss": "transformer_engine.BasicLinear(fp8_current)+quack_cross_entropy"
+    }
+  }
+}

@@ -19,7 +19,7 @@ optimizer-step parity pass.
    262,144-token update. Test 2K, 4K, 8K, 16K, and 32K while the machine has memory
    headroom. This can improve the entire LM-head region, not just the CE
    reduction.
-3. [ ] **Replace Liger CE with QuACK only after chunk tuning.** Compare both at
+3. [x] **Replace Liger CE with QuACK only after chunk tuning.** Compare both at
    the best common chunk size so a chunking improvement is not misattributed to
    the CE implementation.
 4. [ ] **Replace routed-expert permutation with SonicMoE's GPU-resident
@@ -59,7 +59,7 @@ Run in this order if GPU time is limited:
 1. [x] Environment inventory and current-baseline reproduction.
 2. [x] Outer-checkpoint and AttnRes checkpoint-level matrix.
 3. [x] FP8 LM-head chunk-size sweep using the current Liger CE.
-4. [ ] QuACK cross-entropy parity and timing at the tuned chunk size.
+4. [x] QuACK cross-entropy parity and timing at the tuned chunk size.
 5. [ ] SonicMoE routed-expert parity and timing.
 6. [ ] Combined winning checkpoint, LM-head, CE, and MoE settings.
 7. [ ] cuLA H100 fused-forward smoke test and model-shape benchmark.
@@ -77,11 +77,11 @@ Run in this order if GPU time is limited:
     grouped-GEMM, Liger, Transformer Engine, QuACK, SonicMoE, and cuLA versions.
 - [x] Confirm the machine is an H100/SM90. Do not extrapolate H200 bandwidth
   results directly to H100.
-- [ ] Use `uv` and isolated environments for experimental stacks. Keep the
+- [x] Use `uv` and isolated environments for experimental stacks. Keep the
   current locked environment intact because SonicMoE, QuACK, and cuLA currently
   have newer and mutually sensitive Python/PyTorch/CUDA requirements.
-- [ ] Pin and record exact source commits:
-  - OpenKimi baseline: `3bc72c4fbcfa` unless a newer intentional commit exists.
+- [x] Pin and record exact source commits:
+  - OpenKimi parent: `0b7ac3b12eee`.
   - SonicMoE inspected revision: `0349404`.
   - QuACK inspected revision: `3a1c687` / release `v0.6.1`.
   - cuLA inspected revision: `9ff1edb1a027`; record the actually tested revision
@@ -89,7 +89,7 @@ Run in this order if GPU time is limited:
 - [ ] Verify PyTorch CUDA and the system CUDA toolkit match before building cuLA.
   Its current documented stack is Python 3.12+, CUDA/NVCC 12.9+, and
   PyTorch 2.9.1+.
-- [ ] Use fixed seeds and synthetic static-shape inputs for kernel comparisons;
+- [x] Use fixed seeds and synthetic static-shape inputs for kernel comparisons;
   dataset/tokenizer throughput must not contaminate GPU kernel timing.
 - [ ] Warm all compilation, autotuning, and allocator paths before measuring.
   Record cold-start time separately.
@@ -316,7 +316,7 @@ than tuned for H100 Transformer Engine Current Scaling.
   Liger baseline.
 - [x] Require at least 1% full-step improvement to change the default. Otherwise
   retain automatic 2,048-row chunking and record the sweep.
-- [ ] Compare QuACK against the tuned Liger baseline at the same chunk first.
+- [x] Compare QuACK against the tuned Liger baseline at the same chunk first.
   Then allow a small QuACK-specific chunk sweep so each backend also gets its
   best valid configuration.
 
@@ -326,65 +326,64 @@ Reference: [Dao-AILab/quack](https://github.com/Dao-AILab/quack).
 
 ### Integration needed before the benchmark
 
-- [ ] Add QuACK as an optional loss provider without changing the default lock or
+- [x] Add QuACK as an optional loss provider without changing the default lock or
   macOS resolution.
-- [ ] Extend `scripts/benchmark_loss_backends.py` with a QuACK provider and reuse
+- [x] Extend `scripts/benchmark_loss_backends.py` with a QuACK provider and reuse
   the configurable logits chunk size from the preceding sweep.
-- [ ] Keep TE FP8 Current Scaling for the LM-head linear projection and apply
+- [x] Keep TE FP8 Current Scaling for the LM-head linear projection and apply
   QuACK to each BF16 logits chunk first. This isolates the CE replacement without
   giving up the existing FP8 GEMM.
-- [ ] Use QuACK's output/in-place forward where possible so the BF16 logits buffer
+- [x] Use QuACK's output/in-place forward where possible so the BF16 logits buffer
   is overwritten by `dlogits` instead of allocating both.
-- [ ] Implement exact logical-vocabulary handling:
+- [x] Implement exact logical-vocabulary handling:
   - Physical padded vocabulary: 128,016 if the GEMM requires it.
   - Logical vocabulary: 128,001.
   - Dummy logits must behave as negative infinity in the softmax.
   - Dummy-column gradients must be exactly zero.
   - Do not accept an approximation that includes padding columns in the
     denominator.
-- [ ] Preserve tied input-embedding/LM-head gradient accumulation.
-- [ ] Do not switch first to QuACK's chunked-linear CE as if it were equivalent:
+- [x] Preserve tied input-embedding/LM-head gradient accumulation.
+- [x] Do not switch first to QuACK's chunked-linear CE as if it were equivalent:
   that path currently uses ordinary `torch.mm` for parts of the computation and
   does not preserve our TE Current Scaling projection.
 
 ### Correctness matrix
 
-- [ ] Compare FP32 PyTorch reference, current Liger fused linear CE, and QuACK for:
+- [x] Compare FP32 PyTorch reference, current Liger fused linear CE, and QuACK for:
   - Token chunks of 2,048, 4,096, and 8,192.
   - Hidden width 768.
   - Logical vocabulary 128,001 and physical vocabulary 128,016.
   - BF16 logits and FP32 loss accumulation.
   - Mean reduction and `ignore_index=-100`.
-- [ ] Check loss, `dlogits`, hidden-state gradient, and tied LM-head/embedding
+- [x] Check loss, `dlogits`, hidden-state gradient, and tied LM-head/embedding
   gradient.
-- [ ] Include random labels, ignored labels, repeated labels, boundary IDs
+- [x] Include random labels, ignored labels, repeated labels, boundary IDs
   `0`/`128000`, extreme positive/negative logits, and all-ignored input.
-- [ ] Require finite outputs and approximately `5e-3` BF16 relative error against
+- [x] Require finite outputs and approximately `5e-3` BF16 relative error against
   the reference, with stricter checks where FP32 accumulation permits.
-- [ ] Assert exact zero gradients for every physical padding column.
+- [x] Assert exact zero gradients for every physical padding column.
 
 ### Performance matrix
 
-- [ ] Measure isolated forward+backward for Liger and QuACK first at the tuned
+- [x] Measure isolated forward+backward for Liger and QuACK first at the tuned
   Liger chunk, then at neighboring powers of two.
-- [ ] Compare:
-  - TE FP8 LM head + Liger CE.
-  - TE FP8 LM head + QuACK CE.
-  - BF16 QuACK chunked-linear CE as a separate ablation only.
-- [ ] Record CE wall time, kernel time, peak memory, temporary allocations, launch
+- [x] Compare TE FP8 LM head + Liger CE against TE FP8 LM head + QuACK CE.
+- [ ] Benchmark BF16 QuACK chunked-linear CE as a separate ablation only if the
+  selected TE FP8 composition needs another loss-level control.
+- [x] Record CE wall time, kernel time, peak memory, temporary allocations, launch
   count, and full optimizer-step tokens/s.
-- [ ] Verify that no full `[262144, 128001]` logits tensor is materialized.
-- [ ] Treat published QuACK-vs-Liger charts cautiously: the repository's
+- [x] Verify that no full `[262144, 128001]` logits tensor is materialized.
+- [x] Treat published QuACK-vs-Liger charts cautiously: the repository's
   [Liger comparison issue](https://github.com/Dao-AILab/quack/issues/9) remains
   open. Our decision must use the same GEMM, chunking, inputs, and measurement
   method for both providers.
 
 ### QuACK decision gate
 
-- [ ] Adopt only if all parity checks pass and it improves isolated loss time by
+- [x] Adopt only if all parity checks pass and it improves isolated loss time by
   at least 10% **and** full-step throughput by at least 2%, without increasing
   peak memory by more than 1 GiB.
-- [ ] If the only blocker is logical-vocabulary support, keep the patch small and
+- [x] If the only blocker is logical-vocabulary support, keep the patch small and
   upstreamable; do not fork unrelated QuACK code.
 
 ## SonicMoE GPU-resident bitmatrix path

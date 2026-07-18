@@ -6,7 +6,13 @@ import pytest
 import torch
 
 from k3mini.backends import resolve_backend
-from k3mini.config import KernelBackend, LinearPrecision, ModelConfig, load_config
+from k3mini.config import (
+    KernelBackend,
+    LinearPrecision,
+    LossBackend,
+    ModelConfig,
+    load_config,
+)
 from k3mini.fp8 import resolve_fp8_lm_head_chunk_size
 from k3mini.model import (
     BlockAttnResRead,
@@ -114,6 +120,15 @@ def test_fp8_current_configuration_pads_only_the_physical_vocabulary() -> None:
     cfg.fp8_lm_head_chunk_size = 2_047
     with pytest.raises(ValueError, match="positive multiple of 16"):
         cfg.validate()
+
+    quack_without_fp8 = ModelConfig(loss_backend=LossBackend.QUACK)
+    with pytest.raises(ValueError, match="requires linear_precision=fp8_current"):
+        quack_without_fp8.validate()
+
+    quack_cfg, data_cfg, train_cfg = load_config("configs/h100-fp8-current-quack.json")
+    assert quack_cfg.loss_backend is LossBackend.QUACK
+    assert quack_cfg.fp8_lm_head_chunk_size == 16_384
+    train_cfg.validate(data_cfg)
 
 
 def test_checkpoint_policy_defaults_and_overrides() -> None:

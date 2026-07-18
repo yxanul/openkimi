@@ -833,6 +833,7 @@ class K3MiniForCausalLM(nn.Module):
             self.loss_fn = CurrentScalingFusedLinearCrossEntropyLoss(
                 cfg.vocab_size,
                 chunk_size=cfg.fp8_lm_head_chunk_size,
+                ce_backend=self.backend.loss_backend.value,
             )
             self.fp8_recipe: Any | None = current_scaling_recipe()
         elif self.backend.loss_backend is LossBackend.LIGER:

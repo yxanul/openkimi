@@ -118,18 +118,48 @@ def resolve_fp8_lm_head_chunk_size(
     return max(16, 1 << (target - 1).bit_length())
 
 
+def _import_quack_cross_entropy_fwd_out() -> Any:
+    """Import QuACK CE on Torch 2.7 without enabling its unused FP4 code paths."""
+    missing_fp4_dtype = not hasattr(torch, "float4_e2m1fn_x2")
+    if missing_fp4_dtype:
+        torch.float4_e2m1fn_x2 = object()  # type: ignore[attr-defined]
+    try:
+        from quack.cross_entropy import cross_entropy_fwd_out
+    finally:
+        if missing_fp4_dtype:
+            del torch.float4_e2m1fn_x2
+    return cross_entropy_fwd_out
+
+
 def _fp8_linear_cross_entropy_forward(
     hidden: torch.Tensor,
     weight: torch.Tensor,
     labels: torch.Tensor,
     logical_vocab_size: int,
     requested_chunk_size: int | None,
-) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ce_backend: str,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor | None,
+    torch.Tensor | None,
+    torch.Tensor | None,
+]:
     import triton
-    from liger_kernel.ops.cross_entropy import liger_cross_entropy_kernel
-    from liger_kernel.ops.fused_linear_cross_entropy import MAX_FUSED_SIZE
-    from liger_kernel.ops.utils import is_hip
     from transformer_engine.pytorch.ops import BasicLinear
+
+    if ce_backend == "liger":
+        from liger_kernel.ops.cross_entropy import liger_cross_entropy_kernel
+        from liger_kernel.ops.fused_linear_cross_entropy import MAX_FUSED_SIZE
+        from liger_kernel.ops.utils import is_hip
+
+        quack_cross_entropy_fwd_out = None
+    elif ce_backend == "quack":
+        quack_cross_entropy_fwd_out = _import_quack_cross_entropy_fwd_out()
+        liger_cross_entropy_kernel = None
+        MAX_FUSED_SIZE = None
+        is_hip = None
+    else:
+        raise ValueError(f"unsupported FP8 cross-entropy backend: {ce_backend}")
 
     if hidden.ndim != 2 or weight.ndim != 2 or labels.ndim != 1:
         raise ValueError("FP8 fused loss expects hidden [N,H], weight [V,H], and labels [N]")
@@ -172,7 +202,11 @@ def _fp8_linear_cross_entropy_forward(
         requested_chunk_size,
     )
     num_chunks = triton.cdiv(token_count, chunk_size)
-    block_size = min(MAX_FUSED_SIZE, triton.next_power_of_2(logical_vocab_size))
+    block_size = (
+        min(MAX_FUSED_SIZE, triton.next_power_of_2(logical_vocab_size))
+        if MAX_FUSED_SIZE is not None
+        else None
+    )
 
     for chunk_id in range(num_chunks):
         start = chunk_id * chunk_size
@@ -205,39 +239,60 @@ def _fp8_linear_cross_entropy_forward(
         )
         row_count = logits.shape[0]
 
-        # The CE kernel sees only the logical vocabulary. The physical-only
-        # padding is zeroed after the kernel turns logits into dlogits.
-        liger_cross_entropy_kernel[(row_count,)](
-            X_ptr=logits,
-            X_stride=logits.stride(-2),
-            Y_ptr=labels_chunk,
-            Y_stride=labels_chunk.stride(-1),
-            weight_ptr=None,
-            loss_ptr=loss_chunk,
-            z_loss_ptr=None,
-            loss_stride=loss_chunk.stride(-1),
-            token_accuracy_ptr=None,
-            token_accuracy_stride=0,
-            predicted_tokens_ptr=None,
-            predicted_tokens_stride=0,
-            n_cols=logical_vocab_size,
-            n_non_ignore=token_count,
-            sum_non_ignore_weight=token_count,
-            weight_sum=0.0,
-            ignore_index=-100,
-            lse_square_scale=0.0,
-            label_smoothing=0.0,
-            reduction="mean",
-            softcap=None,
-            RETURN_Z_LOSS=False,
-            RETURN_TOKEN_ACCURACY=False,
-            RETURN_PREDICTED_TOKENS=False,
-            HAS_WEIGHT=False,
-            HAS_SOFTCAPPING=False,
-            HAS_GRADIENTS=compute_gradients,
-            BLOCK_SIZE=block_size,
-            num_warps=32 if not is_hip() else 16,
-        )
+        if ce_backend == "liger":
+            assert liger_cross_entropy_kernel is not None
+            assert block_size is not None
+            assert is_hip is not None
+            # Liger sees only the logical vocabulary. The physical-only
+            # dlogits are zeroed before the Transformer Engine backward.
+            liger_cross_entropy_kernel[(row_count,)](
+                X_ptr=logits,
+                X_stride=logits.stride(-2),
+                Y_ptr=labels_chunk,
+                Y_stride=labels_chunk.stride(-1),
+                weight_ptr=None,
+                loss_ptr=loss_chunk,
+                z_loss_ptr=None,
+                loss_stride=loss_chunk.stride(-1),
+                token_accuracy_ptr=None,
+                token_accuracy_stride=0,
+                predicted_tokens_ptr=None,
+                predicted_tokens_stride=0,
+                n_cols=logical_vocab_size,
+                n_non_ignore=token_count,
+                sum_non_ignore_weight=token_count,
+                weight_sum=0.0,
+                ignore_index=-100,
+                lse_square_scale=0.0,
+                label_smoothing=0.0,
+                reduction="mean",
+                softcap=None,
+                RETURN_Z_LOSS=False,
+                RETURN_TOKEN_ACCURACY=False,
+                RETURN_PREDICTED_TOKENS=False,
+                HAS_WEIGHT=False,
+                HAS_SOFTCAPPING=False,
+                HAS_GRADIENTS=compute_gradients,
+                BLOCK_SIZE=block_size,
+                num_warps=32 if not is_hip() else 16,
+            )
+        else:
+            assert quack_cross_entropy_fwd_out is not None
+            # QuACK reduces across the physical row. Negative infinity makes
+            # the padded vocabulary mathematically absent from the softmax,
+            # and its in-place dx output leaves those columns exactly zero.
+            if logical_vocab_size < physical_vocab_size:
+                logits[:, logical_vocab_size:].fill_(-torch.inf)
+            quack_cross_entropy_fwd_out(
+                logits,
+                labels_chunk,
+                None,
+                loss_chunk,
+                None,
+                logits if compute_gradients else None,
+                None,
+                -100,
+            )
         loss_per_token[start:end].copy_(loss_chunk[:unpadded_rows])
 
         if compute_gradients:
@@ -260,7 +315,14 @@ def _fp8_linear_cross_entropy_forward(
             if grad_hidden is not None:
                 grad_hidden[start:end].copy_(chunk_grad_hidden[:unpadded_rows])
 
-    return loss_per_token.sum(), grad_hidden, grad_weight
+    if ce_backend == "quack":
+        valid_tokens = (labels != -100).sum().clamp_min(1).to(torch.float32)
+        gradient_scale = valid_tokens.reciprocal()
+        loss = loss_per_token.sum() * gradient_scale
+    else:
+        gradient_scale = None
+        loss = loss_per_token.sum()
+    return loss, grad_hidden, grad_weight, gradient_scale
 
 
 class _CurrentScalingFusedLinearCrossEntropy(torch.autograd.Function):
@@ -272,18 +334,21 @@ class _CurrentScalingFusedLinearCrossEntropy(torch.autograd.Function):
         labels: torch.Tensor,
         logical_vocab_size: int,
         requested_chunk_size: int | None,
+        ce_backend: str,
     ) -> torch.Tensor:
-        loss, grad_hidden, grad_weight = _fp8_linear_cross_entropy_forward(
+        loss, grad_hidden, grad_weight, gradient_scale = _fp8_linear_cross_entropy_forward(
             hidden,
             weight,
             labels,
             logical_vocab_size,
             requested_chunk_size,
+            ce_backend,
         )
         if grad_hidden is not None and grad_weight is not None:
             ctx.save_for_backward(grad_hidden.detach(), grad_weight.detach())
         else:
             ctx.save_for_backward()
+        ctx.gradient_scale = gradient_scale
         return loss
 
     @staticmethod
@@ -293,26 +358,32 @@ class _CurrentScalingFusedLinearCrossEntropy(torch.autograd.Function):
         )
 
         grad_hidden, grad_weight = ctx.saved_tensors
+        if ctx.gradient_scale is not None:
+            grad_output = grad_output * ctx.gradient_scale
         grad_hidden, grad_weight, _ = fused_linear_cross_entropy_backward(
             grad_output,
             grad_hidden,
             grad_weight,
             None,
         )
-        return grad_hidden, grad_weight, None, None, None
+        return grad_hidden, grad_weight, None, None, None, None
 
 
 class CurrentScalingFusedLinearCrossEntropyLoss(nn.Module):
-    """Chunked TE FP8 LM head plus exact logical-vocabulary Liger CE."""
+    """Chunked TE FP8 LM head plus an in-place fused CE provider."""
 
     def __init__(
         self,
         logical_vocab_size: int,
         chunk_size: int | None = None,
+        ce_backend: str = "liger",
     ) -> None:
         super().__init__()
         self.logical_vocab_size = logical_vocab_size
         self.chunk_size = chunk_size
+        if ce_backend not in {"liger", "quack"}:
+            raise ValueError(f"unsupported FP8 cross-entropy backend: {ce_backend}")
+        self.ce_backend = ce_backend
 
     def forward(
         self,
@@ -329,4 +400,5 @@ class CurrentScalingFusedLinearCrossEntropyLoss(nn.Module):
             labels,
             self.logical_vocab_size,
             self.chunk_size,
+            self.ce_backend,
         )
