@@ -189,6 +189,7 @@ def main() -> None:
                 "checkpoint_attention": model_cfg.checkpoint_attention_enabled,
                 "checkpoint_ffn": model_cfg.checkpoint_ffn_enabled,
                 "attnres_checkpoint_level": model_cfg.attnres_checkpoint_level,
+                "kda_disable_recompute": model_cfg.kda_disable_recompute,
                 "configured_fp8_lm_head_chunk_size": model_cfg.fp8_lm_head_chunk_size,
                 "effective_fp8_lm_head_chunk_size": effective_lm_head_chunk_size,
                 "lm_head_chunks_per_microstep": lm_head_chunks_per_microstep,

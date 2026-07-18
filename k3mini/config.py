@@ -46,6 +46,7 @@ class ModelConfig:
     n_heads: int = 6
     kda_head_dim: int = 128
     kda_conv_kernel: int = 4
+    kda_disable_recompute: bool = False
     global_attn_every: int = 4
     mla_qk_head_dim: int = 128
     mla_v_head_dim: int = 128

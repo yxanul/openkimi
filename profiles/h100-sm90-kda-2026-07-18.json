@@ -1,0 +1,122 @@
+{
+  "date": "2026-07-18",
+  "device": "NVIDIA H100 80GB HBM3",
+  "system_cuda": "13.2",
+  "torch": "2.7.0+cu126",
+  "fla_version": "0.5.2",
+  "fla_revision": "ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17",
+  "shape": {
+    "batch": 32,
+    "sequence_length": 4096,
+    "heads": 6,
+    "head_dim": 128,
+    "dtype": "bfloat16",
+    "safe_gate": false
+  },
+  "standalone_kda": {
+    "repetitions": 7,
+    "fla_recompute": {
+      "forward_median_ms": 3.63872,
+      "backward_median_ms": 14.503008,
+      "total_median_ms": 18.144352,
+      "peak_allocated_gib": 6.590335,
+      "peak_reserved_gib": 7.521484
+    },
+    "fla_saved_intermediates": {
+      "forward_median_ms": 3.773088,
+      "backward_median_ms": 12.942016,
+      "total_median_ms": 16.718016,
+      "peak_allocated_gib": 7.529792,
+      "peak_reserved_gib": 8.271484
+    },
+    "saved_total_latency_reduction_percent": 7.8605,
+    "output_relative_error": 0.0,
+    "gradient_relative_errors": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "full_optimizer_update": {
+    "tokens_per_update": 262144,
+    "microbatch_sequences": 32,
+    "gradient_accumulation_steps": 2,
+    "compile_model": false,
+    "baseline_recompute": {
+      "median_ms": 1845.016,
+      "tokens_per_second": 142082.0
+    },
+    "saved_intermediates": {
+      "samples_ms": [
+        1820.4565,
+        1820.395,
+        1821.1769,
+        1820.8044,
+        1821.5504,
+        1822.7554,
+        1821.786
+      ],
+      "median_ms": 1821.17688,
+      "tokens_per_second": 143942.0865,
+      "peak_allocated_gib": 58.65647,
+      "peak_reserved_gib": 60.0371
+    },
+    "throughput_improvement_percent": 1.3092
+  },
+  "nsight_saved_intermediates": {
+    "captured_step_ms": 1828.697,
+    "captured_tokens_per_second": 143350.0,
+    "total_gpu_kernel_ms": 1808.453515,
+    "direct_kda_chunk_ms": 427.548,
+    "direct_kda_chunk_percent": 23.64,
+    "kda_including_norm_and_gate_percent_approx": 27.0,
+    "largest_kda_kernels": [
+      {
+        "name": "chunk_kda_bwd_kernel_intra",
+        "launches": 24,
+        "total_ms": 144.356325,
+        "percent": 7.98
+      },
+      {
+        "name": "chunk_kda_bwd_kernel_wy_dqkg_fused",
+        "launches": 24,
+        "total_ms": 110.922655,
+        "percent": 6.13
+      }
+    ],
+    "recompute_w_u_fwd_kda_kernel": {
+      "launches": 48,
+      "total_ms": 33.136748
+    }
+  },
+  "cute_preprocessing_experiment": {
+    "provider": "CUTLASS CuTe DSL 4.6.0",
+    "shape": [
+      32,
+      4096,
+      6,
+      128
+    ],
+    "fla_median_ms": 0.490208,
+    "cute_median_ms": 0.6024,
+    "cute_speedup_over_fla": 0.813758,
+    "max_absolute_error": {
+      "q": 0.001953125,
+      "k": 0.001953125,
+      "q_rstd": 2.2351741790771484e-08,
+      "k_rstd": 2.2351741790771484e-08,
+      "gate_cumsum": 0.00030517578125,
+      "beta": 0.0
+    },
+    "selected_for_training": false
+  },
+  "decision": {
+    "selected_backend": "FLA chunk_kda with disable_recompute=true",
+    "custom_cute_selected": false,
+    "reason": "The compiling CuTe preprocessing extraction was slower than FLA, while the supplied full forward and backward drafts are not yet compilable callable training operators."
+  }
+}

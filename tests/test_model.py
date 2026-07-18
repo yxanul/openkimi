@@ -145,9 +145,16 @@ def test_fp8_current_configuration_pads_only_the_physical_vocabulary() -> None:
     assert sonic_cfg.loss_backend is LossBackend.QUACK
     train_cfg.validate(data_cfg)
 
+    kda_saved_cfg, data_cfg, train_cfg = load_config(
+        "configs/h100-fp8-current-quack-sonic-kda-saved.json"
+    )
+    assert kda_saved_cfg.kda_disable_recompute
+    train_cfg.validate(data_cfg)
+
 
 def test_checkpoint_policy_defaults_and_overrides() -> None:
     cfg = ModelConfig(activation_checkpointing=True)
+    assert not cfg.kda_disable_recompute
     assert cfg.checkpoint_attention_enabled
     assert cfg.checkpoint_ffn_enabled
 

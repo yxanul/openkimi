@@ -133,6 +133,7 @@ class KimiDeltaAttention(nn.Module):
         self.d_model = cfg.d_model
         self.n_heads = cfg.n_heads
         self.head_dim = cfg.kda_head_dim
+        self.disable_recompute = cfg.kda_disable_recompute
         projection_size = self.n_heads * self.head_dim
         self.q_proj = nn.Linear(cfg.d_model, projection_size, bias=False)
         self.k_proj = nn.Linear(cfg.d_model, projection_size, bias=False)
@@ -208,6 +209,7 @@ class KimiDeltaAttention(nn.Module):
                 safe_gate=False,
                 output_final_state=False,
                 state_v_first=True,
+                disable_recompute=self.disable_recompute,
             )
         else:
             q = F.normalize(q.float(), p=2.0, dim=-1, eps=1e-6).to(x.dtype)
