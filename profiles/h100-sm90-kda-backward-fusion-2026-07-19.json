@@ -1,0 +1,150 @@
+{
+  "date": "2026-07-19",
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "openkimi_base_commit": "c59171e8db925abfad0814919ef1fd2f0d1daac1",
+  "production_backend_changed": false,
+  "production_kda": {
+    "provider": "yxanul/flash-linear-attention",
+    "commit": "ee8369bb735bcc91aefc967ea911cc75248a1b79",
+    "guarded_diagonal": "tf32x3, span <= 232"
+  },
+  "training_shape": {
+    "microbatch_sequences": 32,
+    "sequence_length": 4096,
+    "gradient_accumulation_steps": 2,
+    "tokens_per_update": 262144
+  },
+  "fresh_nsys_control": {
+    "elapsed_ms": 1793.771,
+    "tokens_per_second": 146141,
+    "wy_dqkg_fused": {
+      "launches": 24,
+      "total_ms": 111.908873,
+      "mean_ms": 4.66287,
+      "threads_per_cta": 128,
+      "registers_per_thread": 255,
+      "dynamic_shared_bytes": 49664,
+      "grid": [
+        64,
+        192
+      ]
+    },
+    "intra": {
+      "launches": 24,
+      "total_ms": 100.099794,
+      "mean_ms": 4.17082,
+      "threads_per_cta": 128,
+      "registers_per_thread": 128,
+      "dynamic_shared_bytes": 16512,
+      "grid": [
+        16,
+        64,
+        192
+      ]
+    },
+    "combined_ms": 212.008667,
+    "note": "The fresh 212.01 ms control supersedes the older 255.28 ms estimate."
+  },
+  "resource_budget": {
+    "sm_count": 132,
+    "registers_per_sm": 65536,
+    "shared_bytes_per_sm": 233472,
+    "conclusion": "The existing WY kernel already uses 255 registers/thread. Inlining the intra phase cannot retain its additional live state without spilling unless the implementation explicitly shortens phase lifetimes."
+  },
+  "coarsened_intra": {
+    "description": "One CTA handles a complete 64-token chunk for each 32-channel slice while preserving the selected blocked TF32x3/span-232 equations.",
+    "selected_warps": 4,
+    "standalone": {
+      "packaged_median_ms": 1.9984639883041382,
+      "candidate_median_ms": 1.863103985786438,
+      "speedup": 1.0726529509626717,
+      "maximum_relative_l2": 0.00043022510362789035
+    },
+    "nsys": {
+      "intra_control_ms": 100.099794,
+      "intra_candidate_ms": 96.16538,
+      "intra_reduction_percent": 3.930489,
+      "wy_candidate_ms": 111.920336,
+      "combined_candidate_ms": 208.085716,
+      "combined_reduction_percent": 1.850376,
+      "threads_per_cta": 128,
+      "registers_per_thread": 128,
+      "dynamic_shared_bytes": 6144,
+      "grid": [
+        4,
+        64,
+        192
+      ]
+    },
+    "full_step_aba": {
+      "candidate_before": {
+        "elapsed_ms": 1782.2318115234375,
+        "tokens_per_second": 147087.48789301512,
+        "speedup_percent_vs_control": 0.372907
+      },
+      "control": {
+        "elapsed_ms": 1788.8779296875,
+        "tokens_per_second": 146541.02197224495
+      },
+      "candidate_after": {
+        "elapsed_ms": 1783.219482421875,
+        "tokens_per_second": 147006.02061837603,
+        "speedup_percent_vs_control": 0.317322
+      },
+      "peak_allocated_gib": 58.656471252441406
+    },
+    "real_model_replay": {
+      "kda_layers": 12,
+      "compared_tensors": 204,
+      "failed_tensors": 0,
+      "maximum_relative_l2": 0.0024311640299856663,
+      "worst_tensor": "layers.13.mixer.parameter.dt_bias",
+      "passed": true
+    },
+    "decision": "keep experimental; the repeatable 0.32-0.37% full-step gain is too small to replace the pinned production provider"
+  },
+  "monolithic_wy_intra": {
+    "description": "A process-local Triton prototype executes the current WY body and the coarsened blocked intra body in one CTA, eliminating the inter-kernel launch but retaining global dA scratch.",
+    "four_warps": {
+      "packaged_median_ms": 1.8620480298995972,
+      "candidate_median_ms": 2.1906239986419678,
+      "speedup": 0.8500080484163122,
+      "latency_regression_percent": 17.645945,
+      "speed_loss_percent": 14.999195,
+      "maximum_relative_l2": 0.00043114079744555056,
+      "registers_per_thread": 255,
+      "dynamic_shared_bytes": 49664,
+      "local_stack_bytes_per_thread": 1152,
+      "decision": "reject"
+    },
+    "eight_warps": {
+      "compiled": false,
+      "failure": "Triton SM90 MMA lowering assertion: Each chunk is filled in with a single warp",
+      "decision": "reject"
+    },
+    "combined_target": {
+      "hypothesis_ms": [
+        100,
+        140
+      ],
+      "fresh_control_ms": 212.008667,
+      "achieved": false
+    },
+    "conclusion": "A useful fusion needs a dedicated CuTe schedule with explicit phase lifetimes and shared/register ownership; mechanical Triton inlining loses to the split pinned FLA kernels."
+  },
+  "conditional_follow_ups": {
+    "backward_epilogue_fusion": {
+      "run": false,
+      "reason": "The fused chunk CTA prerequisite did not win."
+    },
+    "persistent_reverse_scan": {
+      "run": false,
+      "reason": "The fused chunk CTA and epilogue prerequisites did not win."
+    },
+    "forward_specialization": {
+      "run": false,
+      "reason": "Backward fusion was not proven and the standalone preprocessing launch already loses to FLA."
+    }
+  }
+}

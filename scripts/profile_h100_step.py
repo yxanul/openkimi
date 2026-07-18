@@ -69,7 +69,39 @@ def main() -> None:
         action="store_true",
         help="delimit the measured update with cudaProfilerStart/Stop for Nsight Systems",
     )
+    parser.add_argument(
+        "--kda-intra-experiment",
+        choices=("none", "blocked", "exact", "fused"),
+        default="none",
+        help="install a process-local experimental KDA intra backward provider",
+    )
+    parser.add_argument(
+        "--kda-intra-num-warps",
+        type=int,
+        choices=(2, 4, 8),
+        default=4,
+        help="warp count for the experimental coarsened KDA intra provider",
+    )
     args = parser.parse_args()
+
+    if args.kda_intra_experiment != "none":
+        if args.kda_intra_experiment == "fused":
+            from experiments.kda_sm90.fused_wy_intra_triton import (
+                install_fused_wy_intra_experiment,
+            )
+
+            install_fused_wy_intra_experiment(
+                num_warps=args.kda_intra_num_warps,
+            )
+        else:
+            from experiments.kda_sm90.fused_wy_intra_triton import (
+                install_intra_chunk_experiment,
+            )
+
+            install_intra_chunk_experiment(
+                args.kda_intra_experiment,
+                num_warps=args.kda_intra_num_warps,
+            )
 
     model_cfg, data_cfg, train_cfg = load_config(args.config)
     if args.microbatch_sequences is not None:
@@ -190,6 +222,8 @@ def main() -> None:
                 "checkpoint_ffn": model_cfg.checkpoint_ffn_enabled,
                 "attnres_checkpoint_level": model_cfg.attnres_checkpoint_level,
                 "kda_disable_recompute": model_cfg.kda_disable_recompute,
+                "kda_intra_experiment": args.kda_intra_experiment,
+                "kda_intra_num_warps": args.kda_intra_num_warps,
                 "configured_fp8_lm_head_chunk_size": model_cfg.fp8_lm_head_chunk_size,
                 "effective_fp8_lm_head_chunk_size": effective_lm_head_chunk_size,
                 "lm_head_chunks_per_microstep": lm_head_chunks_per_microstep,

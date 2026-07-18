@@ -1,0 +1,25 @@
+{
+  "device": "cuda",
+  "backend": {
+    "requested": "h100",
+    "selected": "h100",
+    "kda": "fla.ops.kda.chunk_kda(openkimi_guarded_diagonal_v1,tf32x3,span<=232)",
+    "short_conv": "fla.modules.ShortConvolution",
+    "attnres": "fla.ops.attnres.fused_attnres(configurable checkpoint_level)",
+    "routed_expert_backend": "sonic",
+    "expert_mlp": "sonicmoe.bitmatrix+quack_grouped_gemm+fused_swiglu",
+    "linear_precision": "fp8_current",
+    "dense_ffn": "transformer_engine.Linear(Float8CurrentScaling)",
+    "loss_backend": "quack",
+    "loss": "transformer_engine.BasicLinear(fp8_current)+quack_cross_entropy"
+  },
+  "milliseconds_per_step": 884.8055943080357,
+  "tokens_per_second": 148136.4955682781,
+  "peak_memory_bytes": 51361864192,
+  "component_forward_backward_ms": {
+    "kda": 26.771460396902903,
+    "latent_moe": 15.512589590890068,
+    "nope_mla": 16.95880671909877,
+    "attnres_9_sources": 5.396731240408761
+  }
+}

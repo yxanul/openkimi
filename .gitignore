@@ -1,4 +1,5 @@
 .venv/
+.quack-packages/
 .DS_Store
 __pycache__/
 *.py[cod]

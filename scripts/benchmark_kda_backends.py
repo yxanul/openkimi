@@ -2,10 +2,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 import time
+from pathlib import Path
 
 import torch
+import torch.nn.functional as F
+
+
+def _json_safe(value: object) -> object:
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def _relative_error(actual: torch.Tensor, expected: torch.Tensor) -> float:
@@ -51,23 +64,34 @@ def _fla_forward(
     *,
     scale: float,
     disable_recompute: bool,
+    safe_gate: bool,
 ) -> torch.Tensor:
     from fla.ops.kda import chunk_kda
 
     q, k, v, raw_decay, beta_logits, a_log, dt_bias = inputs
+    gate = raw_decay
+    use_gate_in_kernel = True
+    if safe_gate:
+        # Preserve the primary KDA gate equation while selecting FLA's
+        # midpoint-factorized intra-chunk path. FLA's fused safe-gate
+        # activation instead uses a bounded sigmoid and is not equivalent.
+        gate = -a_log.exp().view(1, 1, -1, 1) * F.softplus(
+            raw_decay.float() + dt_bias.view(1, 1, q.shape[2], q.shape[3])
+        )
+        use_gate_in_kernel = False
     output, _ = chunk_kda(
         q=q,
         k=k,
         v=v,
-        g=raw_decay,
+        g=gate,
         beta=beta_logits,
         A_log=a_log,
         dt_bias=dt_bias,
         scale=scale,
         use_qk_l2norm_in_kernel=True,
-        use_gate_in_kernel=True,
+        use_gate_in_kernel=use_gate_in_kernel,
         use_beta_sigmoid_in_kernel=True,
-        safe_gate=False,
+        safe_gate=safe_gate,
         output_final_state=False,
         state_v_first=True,
         disable_recompute=disable_recompute,
@@ -82,6 +106,7 @@ def _measure_fla(
     *,
     scale: float,
     disable_recompute: bool,
+    safe_gate: bool,
     warmup: int,
     repeats: int,
 ) -> tuple[dict[str, object], torch.Tensor, list[torch.Tensor]]:
@@ -105,6 +130,7 @@ def _measure_fla(
             inputs,
             scale=scale,
             disable_recompute=disable_recompute,
+            safe_gate=safe_gate,
         )
         forward_end.record()
         output.backward(gradient)
@@ -129,6 +155,7 @@ def _measure_fla(
         {
             "provider": name,
             "disable_recompute": disable_recompute,
+            "safe_gate": safe_gate,
             "cold_start_seconds": cold_start_seconds,
             "forward_samples_ms": forward_samples,
             "backward_samples_ms": backward_samples,
@@ -159,6 +186,23 @@ def main() -> None:
     parser.add_argument("--head-dim", type=int, default=128)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument(
+        "--include-safe-gate",
+        action="store_true",
+        help=(
+            "also measure FLA's midpoint-factorized path with the faithful "
+            "gate equation precomputed outside the kernel"
+        ),
+    )
+    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--snapshot-dir",
+        type=Path,
+        help=(
+            "save the last provider's output and input gradients separately "
+            "for cross-process exact/experimental parity checks"
+        ),
+    )
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("this benchmark requires CUDA")
@@ -191,40 +235,82 @@ def main() -> None:
     )
 
     results: list[tuple[dict[str, object], torch.Tensor, list[torch.Tensor]]] = []
-    for name, disable_recompute in (
-        ("fla_recompute", False),
-        ("fla_saved_intermediates", True),
-    ):
+    providers = [
+        ("fla_recompute", False, False),
+        ("fla_saved_intermediates", True, False),
+    ]
+    if args.include_safe_gate:
+        providers.append(("fla_safe_gate_saved_intermediates", True, True))
+    for name, disable_recompute, safe_gate in providers:
         result = _measure_fla(
             name,
             inputs,
             gradient,
             scale=scale,
             disable_recompute=disable_recompute,
+            safe_gate=safe_gate,
             warmup=args.warmup,
             repeats=args.repeats,
         )
         results.append(result)
-        print(json.dumps(result[0]))
+        print(json.dumps(_json_safe(result[0])))
 
     expected_result, expected_output, expected_gradients = results[0]
+    comparisons: list[dict[str, object]] = []
     for result, output, gradients in results[1:]:
-        print(
-            json.dumps(
-                {
-                    "comparison": f"{result['provider']}_vs_{expected_result['provider']}",
-                    "output_relative_error": _relative_error(output, expected_output),
-                    "gradient_relative_errors": [
-                        _relative_error(actual, expected)
-                        for actual, expected in zip(
-                            gradients,
-                            expected_gradients,
-                            strict=True,
-                        )
-                    ],
-                }
-            )
+        comparison = {
+            "comparison": f"{result['provider']}_vs_{expected_result['provider']}",
+            "output_relative_error": _relative_error(output, expected_output),
+            "gradient_relative_errors": [
+                _relative_error(actual, expected)
+                for actual, expected in zip(
+                    gradients,
+                    expected_gradients,
+                    strict=True,
+                )
+            ],
+        }
+        comparisons.append(comparison)
+        print(json.dumps(_json_safe(comparison)))
+
+    if args.snapshot_dir is not None:
+        _, snapshot_output, snapshot_gradients = results[-1]
+        args.snapshot_dir.mkdir(parents=True, exist_ok=True)
+        torch.save(snapshot_output.cpu(), args.snapshot_dir / "output.pt")
+        for index, value in enumerate(snapshot_gradients):
+            torch.save(value.cpu(), args.snapshot_dir / f"gradient_{index}.pt")
+        snapshot_metadata = {
+            "provider": results[-1][0]["provider"],
+            "shape": list(snapshot_output.shape),
+            "files": [
+                "output.pt",
+                *[
+                    f"gradient_{index}.pt"
+                    for index in range(len(snapshot_gradients))
+                ],
+            ],
+        }
+        (args.snapshot_dir / "metadata.json").write_text(
+            json.dumps(snapshot_metadata, indent=2) + "\n"
         )
+
+    if args.output is not None:
+        payload = {
+            "device": torch.cuda.get_device_name(),
+            "torch": torch.__version__,
+            "shape": [
+                args.batch,
+                args.sequence_length,
+                args.heads,
+                args.head_dim,
+            ],
+            "warmup": args.warmup,
+            "repeats": args.repeats,
+            "providers": [result[0] for result in results],
+            "comparisons": comparisons,
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(_json_safe(payload), indent=2) + "\n")
 
 
 if __name__ == "__main__":

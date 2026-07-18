@@ -1,0 +1,134 @@
+{
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "shape": [
+    2,
+    4096,
+    6,
+    128
+  ],
+  "candidate": "blocked",
+  "candidate_num_warps": 4,
+  "packaged_tf32x3_span232": {
+    "samples_ms": [
+      2.0260159969329834,
+      1.9554239511489868,
+      1.9984639883041382,
+      2.0031039714813232,
+      2.0055999755859375,
+      1.9688960313796997,
+      1.9676159620285034
+    ],
+    "median_ms": 1.9984639883041382
+  },
+  "exact_fla": {
+    "samples_ms": [
+      1.924064040184021,
+      1.968991994857788,
+      2.005631923675537,
+      1.9564800262451172,
+      1.9189120531082153,
+      1.9750080108642578,
+      1.9239039421081543
+    ],
+    "median_ms": 1.9564800262451172
+  },
+  "candidate_result": {
+    "samples_ms": [
+      1.8807040452957153,
+      1.863103985786438,
+      1.8435200452804565,
+      1.9026240110397339,
+      1.909440040588379,
+      1.842687964439392,
+      1.8213119506835938
+    ],
+    "median_ms": 1.863103985786438
+  },
+  "speedup_vs_packaged": 1.0726529509626717,
+  "candidate_metrics_vs_exact": {
+    "output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 10.800042152404785
+    },
+    "q": {
+      "relative_l2": 1.0983195352309849e-05,
+      "max_absolute_error": 6.103515625e-05,
+      "reference_l2": 10.802131652832031
+    },
+    "k": {
+      "relative_l2": 1.4632297279604245e-05,
+      "max_absolute_error": 6.103515625e-05,
+      "reference_l2": 10.801615715026855
+    },
+    "v": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 10.802127838134766
+    },
+    "raw_decay": {
+      "relative_l2": 9.681005030870438e-05,
+      "max_absolute_error": 3.0517578125e-05,
+      "reference_l2": 1.3508834838867188
+    },
+    "beta": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 4.214434623718262
+    },
+    "A_log": {
+      "relative_l2": 0.00023111044720280915,
+      "max_absolute_error": 0.0002536475658416748,
+      "reference_l2": 1.2356207370758057
+    },
+    "dt_bias": {
+      "relative_l2": 0.00043022510362789035,
+      "max_absolute_error": 0.000244140625,
+      "reference_l2": 1.4208345413208008
+    }
+  },
+  "packaged_metrics_vs_exact": {
+    "output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 10.800042152404785
+    },
+    "q": {
+      "relative_l2": 1.0983195352309849e-05,
+      "max_absolute_error": 6.103515625e-05,
+      "reference_l2": 10.802131652832031
+    },
+    "k": {
+      "relative_l2": 1.1373887900845148e-05,
+      "max_absolute_error": 6.103515625e-05,
+      "reference_l2": 10.801615715026855
+    },
+    "v": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 10.802127838134766
+    },
+    "raw_decay": {
+      "relative_l2": 8.6829015344847e-05,
+      "max_absolute_error": 3.0517578125e-05,
+      "reference_l2": 1.3508834838867188
+    },
+    "beta": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 4.214434623718262
+    },
+    "A_log": {
+      "relative_l2": 4.088631976628676e-05,
+      "max_absolute_error": 4.7206878662109375e-05,
+      "reference_l2": 1.2356207370758057
+    },
+    "dt_bias": {
+      "relative_l2": 0.0003745239810086787,
+      "max_absolute_error": 0.000244140625,
+      "reference_l2": 1.4208345413208008
+    }
+  },
+  "candidate_maximum_relative_l2": 0.00043022510362789035
+}

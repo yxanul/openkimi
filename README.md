@@ -28,7 +28,7 @@ is zero-initialized.
 
 | Component | macOS/CPU/MPS | H100 |
 |---|---|---|
-| KDA | exact recurrent FP32-state oracle | FLA `chunk_kda`, fused Q/K norm, decay gate, beta, backward |
+| KDA | exact recurrent FP32-state oracle | Pinned FLA `chunk_kda` with guarded TF32x3/span-232 diagonal backward, fused Q/K norm, decay gate, and beta |
 | KDA short convolution | causal PyTorch depthwise convolution | FLA Triton `ShortConvolution` |
 | NoPE MLA | PyTorch SDPA | SDPA FlashAttention backend |
 | Block AttnRes | readable depth softmax | FLA fused AttnRes + output RMSNorm, checkpoint level 1 |
@@ -61,23 +61,37 @@ uv run python test_smoke.py
 Linux/H100:
 
 ```bash
-uv sync --locked --extra cuda
+scripts/bootstrap_h100.sh
 uv run k3-mini dry-run --config configs/primary.json --backend h100
 uv run k3-mini train --config configs/h100-smoke.json --synthetic
 ```
 
+The bootstrap validates a Linux x86-64 NVIDIA host, installs the CUDA 12.6
+compiler plus matching cuDNN/NCCL headers for locked Torch 2.7, syncs the exact project
+`uv.lock`, and uses the image's side-by-side CUDA 13.2 toolkit for the pinned
+QuACK/SonicMoE/CuTe experimental stack. Set `K3MINI_SKIP_APT=1` when the 12.6
+system packages are already present, or `K3MINI_INSTALL_EXPERIMENTS=0` when only
+the locked core environment is required.
+
 The CUDA extra pins these inspected revisions:
 
-- `fla-org/flash-linear-attention@ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17`
+- `yxanul/flash-linear-attention@ee8369bb735bcc91aefc967ea911cc75248a1b79`
+  (upstream `ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17` plus the validated
+  TF32x3/span-232 guarded KDA backward patch)
 - `databricks/megablocks@952db33d6eac334d22c61e47a0d5d41446298784`
 - `linkedin/Liger-Kernel@72a4ed47a5c593b58045a0af14d3f774a037bd92`
 - `transformer-engine[pytorch]==2.16.0`
 
-`uv` supplies Torch as an explicit build dependency for MegaBlocks and `grouped_gemm`, and sets
-`GROUPED_GEMM_CUTLASS=1` specifically for the latter so expert counts can remain CUDA-resident.
+`uv` supplies the pinned Torch as an explicit build dependency for MegaBlocks,
+`grouped_gemm`, and Transformer Engine's PyTorch extension, and sets
+`GROUPED_GEMM_CUTLASS=1` specifically for grouped-GEMM so expert counts can remain CUDA-resident.
 Both packages are guarded by Linux x86-64 markers and are not installed into the macOS environment.
 Record `nvidia-smi`, driver, CUDA toolkit, GPU model, and the successful backend report when the
 target SSH host is available.
+
+The H100 backend fails closed unless the installed FLA exposes OpenKimi guarded-KDA patch version
+1, uses TF32x3, and has a runtime span no larger than 232. `uv sync --locked --extra cuda` installs
+the exact fork commit directly; training and bootstrap no longer modify `site-packages`.
 
 QuACK 0.6.1 requires Python 3.12 and a CUDA 12.9+ toolkit. Its CUDA-13 CuTe DSL dependencies are
 kept in an isolated target so they cannot perturb the locked Torch/FLA/MegaBlocks environment:
@@ -318,6 +332,16 @@ inference-only. FlashQLA is not substituted for KDA because it implements scalar
 DeltaNet rather than KDA's channel-wise decay. If profiling shows FLA KDA is a material full-step
 bottleneck, a custom kernel should be considered only after preserving these parity tests and
 demonstrating an end-to-end speedup.
+
+The current SM90 experiment meets that initial bar without replacing the full FLA kernel: a
+runtime-guarded midpoint factorization in FLA's two backward-intra diagonal phases, using
+`tf32x3` MMA plus the exact pairwise fallback, improves the complete H100 update by
+`2.39–2.48%` to 146,619 tok/s. Plain TF32 and midpoint thresholds 248/240 are rejected on
+decay-gradient accuracy; threshold 232 passes all adversarial, partial-chunk, fallback, and
+controlled real-model mixer fixtures. The selected implementation is installed from the exact
+FLA fork commit listed above; a clean locked reinstall reports the guarded backend explicitly and
+measured 148,136 tok/s in the post-package no-regression run. See
+[`experiments/kda_sm90/README.md`](experiments/kda_sm90/README.md).
 
 ## References
 

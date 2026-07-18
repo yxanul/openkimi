@@ -44,4 +44,7 @@ def test_h100_backend_selected_and_kda_parity(tiny_model_config) -> None:
         output = model(tokens, tokens, return_diagnostics=True)
     assert output.loss is not None
     output.loss.backward()
-    assert output.diagnostics["backend"]["kda"] == "fla.ops.kda.chunk_kda"
+    assert output.diagnostics["backend"]["kda"] == (
+        "fla.ops.kda.chunk_kda("
+        "openkimi_guarded_diagonal_v1,tf32x3,span<=232)"
+    )

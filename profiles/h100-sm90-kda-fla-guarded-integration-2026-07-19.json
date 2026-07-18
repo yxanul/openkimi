@@ -1,0 +1,82 @@
+{
+  "date": "2026-07-19",
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "openkimi_commit": "c59171e8db925abfad0814919ef1fd2f0d1daac1",
+  "fla_chunk_intra_exact_sha256": "09979c0d1e768ce7efd34fbba8b6ce019b542f21e62c13f7a1f79bee3d0a9a0c",
+  "experiment": {
+    "implementation": "runtime-guarded midpoint factorization inside FLA chunk_kda_bwd_kernel_intra",
+    "span_threshold": 248.0,
+    "dot_precision": "tf32x3",
+    "fallback": "original safe_gate=False scalar pairwise path",
+    "shape": [
+      32,
+      4096,
+      6,
+      128
+    ]
+  },
+  "production_shape_parity_vs_exact_fla": {
+    "relative_l2": {
+      "output": 0.0,
+      "q_gradient": 0.000023066932044457644,
+      "k_gradient": 0.000023479788069380447,
+      "v_gradient": 0.0,
+      "raw_decay_gradient": 0.0007474999292753637,
+      "beta_logits_gradient": 1.117611603262958e-7,
+      "a_log_gradient": 0.0031469508539885283,
+      "dt_bias_gradient": 0.003552408656105399
+    },
+    "nonfinite_counts": {
+      "exact": 0,
+      "guarded": 0
+    },
+    "acceptance_threshold": 0.005,
+    "passed": true,
+    "rejected_variant": {
+      "dot_precision": "tf32",
+      "raw_decay_gradient_relative_l2": 0.026201261207461357,
+      "a_log_gradient_relative_l2": 0.04668797180056572,
+      "dt_bias_gradient_relative_l2": 0.13808952271938324,
+      "passed": false
+    }
+  },
+  "standalone_saved_intermediates": {
+    "exact": {
+      "forward_median_ms": 3.798111915588379,
+      "backward_median_ms": 13.154784202575684,
+      "total_median_ms": 16.947328090667725
+    },
+    "guarded_tf32x3": {
+      "forward_median_ms": 3.8224639892578125,
+      "backward_median_ms": 12.098527908325195,
+      "total_median_ms": 15.919679880142212
+    },
+    "backward_latency_reduction_percent": 8.029446002190406,
+    "total_latency_reduction_percent": 6.06377716314704
+  },
+  "full_optimizer_update": {
+    "tokens": 262144,
+    "microbatch_sequences": 32,
+    "sequence_length": 4096,
+    "gradient_accumulation_steps": 2,
+    "exact_before": {
+      "elapsed_median_ms": 1832.308837890625,
+      "tokens_per_second": 143067.58477560105
+    },
+    "guarded_tf32x3": {
+      "elapsed_median_ms": 1777.97607421875,
+      "tokens_per_second": 147439.55433437828
+    },
+    "exact_after": {
+      "elapsed_median_ms": 1830.6871337890625,
+      "tokens_per_second": 143194.32040658296
+    },
+    "throughput_improvement_vs_exact_before_percent": 3.055877098669546,
+    "throughput_improvement_vs_exact_after_percent": 2.964666416755546,
+    "peak_allocated_gib": 58.656471252441406,
+    "a_b_a_control_passed": true
+  },
+  "decision": "superseded: threshold 248 passed synthetic production-shape parity but failed controlled real-model mixer gradients; use threshold 232",
+  "superseded_by": "profiles/h100-sm90-kda-fla-guarded-validation-2026-07-19.json"
+}

@@ -246,7 +246,7 @@ wheels = [
 [[package]]
 name = "flash-linear-attention"
 version = "0.5.2"
-source = { git = "https://github.com/fla-org/flash-linear-attention.git?rev=ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17#ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17" }
+source = { git = "https://github.com/yxanul/flash-linear-attention.git?rev=ee8369bb735bcc91aefc967ea911cc75248a1b79#ee8369bb735bcc91aefc967ea911cc75248a1b79" }
 dependencies = [
     { name = "einops" },
     { name = "transformers" },
@@ -464,7 +464,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "datasets", specifier = ">=4.0.0,<5" },
-    { name = "flash-linear-attention", extras = ["cuda"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/fla-org/flash-linear-attention.git?rev=ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17" },
+    { name = "flash-linear-attention", extras = ["cuda"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/yxanul/flash-linear-attention.git?rev=ee8369bb735bcc91aefc967ea911cc75248a1b79" },
     { name = "grouped-gemm", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", specifier = "==0.3.0" },
     { name = "huggingface-hub", specifier = ">=0.33.0,<2" },
     { name = "liger-kernel", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'cuda'", git = "https://github.com/linkedin/Liger-Kernel.git?rev=72a4ed47a5c593b58045a0af14d3f774a037bd92" },

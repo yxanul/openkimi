@@ -4,6 +4,177 @@ This is the runbook for choosing the next OpenKimi training backends. Preserve t
 model mathematics first; throughput wins only count after forward, backward, and
 optimizer-step parity pass.
 
+## Next: guarded KDA diagonal MMA and backward fusion
+
+The saved-intermediate exact FLA configuration is the control baseline. On the
+2026-07-19 H100 it measures 16.947 ms for standalone KDA forward+backward and
+143,068–143,194 tok/s for the complete update. Directly identifiable KDA chunk
+kernels account for 23.6% of GPU kernel time (approximately 27% with Q/K
+normalization and gate transforms), so KDA backward remains the first
+optimization target.
+
+### 1. Guarded diagonal MMA — full integration packaged and verified
+
+- [x] Confirm the pinned FLA `safe_gate=False` path: both diagonal phases in
+  `chunk_kda_bwd_kernel_intra` execute 16 scalar partner loops, recompute a full
+  `[16,32]` `exp2` tile per partner, and do not use tensor cores.
+- [x] Add a device-independent oracle for the guarded factorization:
+  `experiments/kda_sm90/guarded_diagonal_oracle.py`.
+- [x] Add CPU tests covering factorized parity, exact fallback for large gate
+  spans, rejection of non-monotonic blocks, and guard validation.
+- [x] Add the isolated H100 Triton benchmark
+  `experiments/kda_sm90/benchmark_guarded_diagonal.py`. It compares the exact
+  scalar FLA algebra against the runtime-guarded TF32 `16x16 @ 16x32` path for
+  both diagonal phases.
+- [x] Measure the actual distribution of `g_max - g_min` over every
+  `[BC=16,BK=32]` tile from all 12 KDA layers at the primary initialized-model
+  shape. The 2,359,296 tiles have p50/p90/p99/p99.9/max spans of
+  `143.673/233.876/248.796/254.614/265.768`.
+- [x] Reject the first-row threshold plan. Threshold 30 accepts only 2.778% of
+  actual initialized-model tiles. Sweep the midpoint-reference policy instead;
+  threshold 248 accepts 98.742% while bounding each factor near `2**±124`.
+- [x] Record guard-hit rate, latency distribution, maximum error, relative
+  error, and cold compile time for the isolated Triton schedule:
+
+  ```bash
+  uv run --extra cuda python experiments/kda_sm90/benchmark_guarded_diagonal.py \
+    --blocks 196608 --mean-log2-decay 8 \
+    --reference-policy midpoint --thresholds 128,160,192,224,240,248,250 \
+    --warmup 10 --repetitions 30
+  ```
+
+- [x] Require the exact pairwise FMA fallback whenever the tile is
+  non-monotonic, non-finite, or exceeds the selected span. The first-row
+  and centered reference policies are both covered by the CPU oracle and H100
+  benchmark.
+- [x] Lower the isolated four-product tile to native CuTe DSL 4.6 with TF32 MMA
+  and FP32 accumulation.
+- [x] Remove the CuTe B-operand shared-memory bank conflict. The plain
+  `[channel,row] = [32,16]` stride-16 layout has predicted 16-way producer-store
+  conflicts. The s32/s64/s128 sweep reduces this to 8/4/2-way and measures
+  1.295/1.136/1.121 ms versus 1.597 ms plain. The selected s128 tile is 29.8%
+  faster than plain, 1.948x faster than exact, and within 2.2% of the Triton
+  prototype, with unchanged <=7.64e-4 relative error. Nsight Compute confirms
+  66.7% fewer shared-load and 63.2% fewer shared-store bank conflicts across
+  128 CTAs.
+- [x] Test replacing the negative factor's `exp2` with a reciprocal of the
+  positive factor. It regresses from 1.125 to 1.241 ms on the s128 layout, so
+  retain two `exp2` evaluations.
+- [x] Cache the gate tile during validation and simplify the reference to the
+  first/last monotonic values. This reduces the controlled median from 1.118
+  to 1.037 ms (7.23%), cuts global-load L1 sectors by 25.1%, reaches 2.10x
+  versus exact, and beats the Triton prototype by 5.44%. Select gate caching
+  even though it increases allocated registers from 48 to 64.
+- [x] Test channel-half warp ownership and register-local upper summation.
+  Reversed-order timing measures 1.048 ms versus 1.033 ms for product ownership
+  (1.43% slower), so retain one warp per product.
+- [x] Test direct Dq/Dk accumulator stores. Removing 4 KiB of shared epilogue
+  scratch regresses from 1.042 to 1.074 ms (3.05%), so retain the coalescing
+  shared-memory epilogue.
+- [x] Test an explicit exact-fallback diagonal. It improves an all-fallback
+  workload by 10.8%, but enlarging the mixed kernel regresses the realistic
+  98.39%-fast workload by 1.28%. Retain the compact loop fallback; do not add a
+  17 KiB decay table to the common kernel.
+- [x] Verify that FLA's existing unguarded factorized path is not usable as a
+  shortcut. With the faithful gate equation precomputed, `safe_gate=True`
+  produces NaN output and gradients at `[1,256,6,128]`.
+- [x] Integrate the provisional midpoint-248 guard into FLA's complete
+  `chunk_kda_bwd_kernel_intra` and compare output plus all seven differentiable
+  inputs at `[32,4096,6,128]`. Plain TF32 is rejected: raw-decay, `A_log`, and
+  `dt_bias` gradient errors are 2.62%, 4.67%, and 13.81%. Triton `tf32x3`
+  passes this synthetic production-shape target, but threshold 248 is not the
+  final selection because the controlled real-model replay below is stricter.
+- [x] Extend the TF32x3 parity gate to near-threshold, high-decay,
+  cancellation-heavy, 4,103-token partial-chunk, non-monotonic/fallback, and
+  real-model gradient fixtures. High-decay and non-monotonic fallbacks are
+  bit-identical. For a deliberately near-zero cancellation reference, accept
+  only if either relative L2 is below `5e-3` or maximum absolute error is below
+  `5e-5`; all other tensors retain the relative target and no non-finite values
+  are allowed.
+- [x] Reject thresholds 248 and 240 after replaying actual activations and
+  downstream gradients captured from one exact 4,096-token full-model
+  backward. Threshold 248 fails two of 204 KDA mixer tensors and threshold 240
+  fails one. Threshold **232** is the highest passing value: zero failures,
+  worst relative L2 `2.409e-3`, and an 88.615% initialized-model guard-hit rate.
+  A naive two-full-model comparison is not a valid gate because even two exact
+  runs differ by up to 18.9% across nondeterministic downstream reductions.
+- [x] Lower the winning schedule as an ABI-identical Triton integration for
+  `chunk_kda_bwd_intra`, retaining FLA's `BT=64`, `BC=16`, saved-intermediate
+  ABI, FP32 accumulators, and exact fallback. The reversible experiment is
+  `experiments/kda_sm90/patch_fla_guarded_intra.py`. It verifies the pinned FLA
+  source hash before modifying the isolated site-package and preserves an
+  exact-source restore.
+- [x] Productionize the winning integration as the exact-pinned fork
+  `yxanul/flash-linear-attention@ee8369bb735bcc91aefc967ea911cc75248a1b79`,
+  based on upstream `ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17`.
+  `pyproject.toml` and `uv.lock` install it directly; bootstrap and H100 backend
+  resolution fail closed unless patch version 1, TF32x3, and span `<=232` are
+  present. The training path no longer modifies `site-packages`.
+- [x] Verify a clean `uv sync --locked --extra cuda` on H100 resolves the fork
+  and exact commit through `direct_url.json`, then rerun the four backend tests,
+  20 H100 parity/platform tests, five adversarial fixtures, and the controlled
+  12-mixer/204-tensor replay. All pass. The packaged no-regression benchmark is
+  884.806 ms per 131,072-token microstep (148,136 tok/s), equivalent to
+  1,769.611 ms for the configured two-microstep 262,144-token update.
+- [ ] Lower the selected native CuTe schedule into the full ABI only if it can
+  beat the now-faster TF32x3 Triton integration: midpoint guard 232, s128 B
+  layout, cached gate, product-owned warps, shared output epilogue, two
+  exponentials, and compact fallback. Do not extend the old per-16-chunk
+  workspace ABI.
+- [ ] Revisit storing two full A matrices only after full-ABI profiling. The
+  cached kernel is register-limited at eight CTAs/SM, so adding register masks
+  is unlikely to improve isolated-tile residency.
+- [x] Compare the full integration against exact FLA. Saved-intermediate KDA
+  at the selected threshold 232 falls from 16.947 to 16.054 ms (`-5.27%` total,
+  `-6.76%` backward). Exact FLA controls measure 1,832.31/1,830.69 ms per
+  update; guarded TF32x3-232 measures 1,787.93 ms and 146,619 tok/s:
+  `+2.39–2.48%` throughput at the same 58.66 GiB peak allocation. The earlier
+  147,440 tok/s threshold-248 result is rejected on real-model gradient
+  accuracy. Final results are in
+  `profiles/h100-sm90-kda-fla-guarded-validation-2026-07-19.json`.
+
+### 2. Fuse `wy_dqkg_fused` and `intra` after the drop-in wins
+
+- [x] Prototype the fused CTA before committing to a full CuTe rewrite. A
+  process-local Triton candidate executes the existing WY body followed by one
+  coarsened, blocked intra phase per `(chunk,b,hv)`. It preserves numerical
+  parity (`4.31e-4` worst relative L2), but the four-warp kernel regresses from
+  1.862 to 2.191 ms (`+17.6%` latency, `-15.0%` speed). It retains global `dA`
+  scratch, so it is a rejection probe rather than a production implementation.
+  The eight-warp version cannot lower the current SM90 MMA layout.
+- [x] Budget SMEM/registers before deeper implementation. The existing WY
+  kernel already consumes 255 registers/thread and 49,664 B dynamic SMEM. The
+  fused candidate spills 1,152 B of local stack per thread. This invalidates
+  mechanical Triton inlining; a future attempt needs a dedicated CuTe schedule
+  with explicit phase lifetimes and shared/register ownership.
+- [x] Re-measure the target against a fresh control. Nsight now reports
+  111.909 ms/update for WY and 100.100 ms/update for intra, or 212.009 ms
+  combined rather than the older 255.28 ms estimate. The speculative
+  100–140 ms target was not achieved.
+- [x] Retain the independently useful coarsened intra only as an experiment.
+  Four warps reduce the intra region by 3.93% and the combined WY+intra region
+  by 1.85%. Full-step A/B/A improves throughput by only 0.32–0.37%
+  (146,541 to 147,006–147,087 tok/s). A controlled replay of all 12 real KDA
+  mixers passes all 204 tensors with `2.431e-3` worst relative L2. This is not
+  enough to replace the pinned production provider.
+
+### 3. Backward epilogue and persistent scan follow-ups
+
+- [x] Do not fold reverse chunk-local `dg` cumsum, KDA gate backward, Q/K L2
+  backward, or beta-sigmoid backward into the rejected CTA. This experiment
+  was explicitly conditional on fused chunk CTA speedup; that prerequisite
+  failed.
+- [x] Do not test the persistent `(b,hv)` reverse scan yet. Its fused-CTA and
+  epilogue prerequisites both failed, so a 192-CTA persistent grid on the
+  132-SM H100 would add a second independent scheduling risk without a winning
+  producer to integrate.
+- [x] Leave forward specialization alone because backward was not proven. The
+  measured
+  standalone split is 3.77 ms forward versus 12.94 ms backward. Any forward
+  work should fuse normalization/gate/beta into the existing intra prologue;
+  the standalone CuTe preprocessing launch already lost to FLA
+  (0.602 ms versus 0.490 ms).
+
 ## Most likely wins
 
 1. [x] **Remove unnecessary outer checkpoint replay.** The current profile has

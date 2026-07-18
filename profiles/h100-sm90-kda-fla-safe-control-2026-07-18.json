@@ -1,0 +1,168 @@
+{
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "shape": [
+    1,
+    256,
+    6,
+    128
+  ],
+  "warmup": 2,
+  "repeats": 5,
+  "providers": [
+    {
+      "provider": "fla_recompute",
+      "disable_recompute": false,
+      "safe_gate": false,
+      "cold_start_seconds": 26.45012711599975,
+      "forward_samples_ms": [
+        0.806879997253418,
+        0.7934719920158386,
+        0.8139839768409729,
+        0.751039981842041,
+        0.7260479927062988
+      ],
+      "backward_samples_ms": [
+        1.2718080282211304,
+        1.3367999792099,
+        1.312831997871399,
+        1.4715520143508911,
+        1.3295680284500122
+      ],
+      "total_samples_ms": [
+        2.0786880254745483,
+        2.1302719712257385,
+        2.126815974712372,
+        2.222591996192932,
+        2.055616021156311
+      ],
+      "forward_median_ms": 0.7934719920158386,
+      "backward_median_ms": 1.3295680284500122,
+      "total_median_ms": 2.126815974712372,
+      "peak_allocated_gib": 0.012875080108642578,
+      "peak_reserved_gib": 0.265625,
+      "output_l2": 1.9361016750335693,
+      "gradient_l2": [
+        1.9076553583145142,
+        1.9064087867736816,
+        1.9281830787658691,
+        0.29182690382003784,
+        0.7361465096473694,
+        0.23887398838996887,
+        0.29706570506095886
+      ]
+    },
+    {
+      "provider": "fla_saved_intermediates",
+      "disable_recompute": true,
+      "safe_gate": false,
+      "cold_start_seconds": 0.0026014629997916927,
+      "forward_samples_ms": [
+        0.7129279971122742,
+        0.7354879975318909,
+        0.750495970249176,
+        0.7205759882926941,
+        0.7574080228805542
+      ],
+      "backward_samples_ms": [
+        0.9575039744377136,
+        0.9994239807128906,
+        0.963487982749939,
+        0.9627839922904968,
+        0.9844800233840942
+      ],
+      "total_samples_ms": [
+        1.6704319715499878,
+        1.7349119782447815,
+        1.713983952999115,
+        1.683359980583191,
+        1.7418880462646484
+      ],
+      "forward_median_ms": 0.7354879975318909,
+      "backward_median_ms": 0.963487982749939,
+      "total_median_ms": 1.713983952999115,
+      "peak_allocated_gib": 0.014712333679199219,
+      "peak_reserved_gib": 0.267578125,
+      "output_l2": 1.9361016750335693,
+      "gradient_l2": [
+        1.9076553583145142,
+        1.9064087867736816,
+        1.9281830787658691,
+        0.29182690382003784,
+        0.7361465096473694,
+        0.23887398838996887,
+        0.29706570506095886
+      ]
+    },
+    {
+      "provider": "fla_safe_gate_saved_intermediates",
+      "disable_recompute": true,
+      "safe_gate": true,
+      "cold_start_seconds": 2.0837341729998116,
+      "forward_samples_ms": [
+        0.818880021572113,
+        0.8466879725456238,
+        0.8937280178070068,
+        0.8542400002479553,
+        0.8194559812545776
+      ],
+      "backward_samples_ms": [
+        1.0461440086364746,
+        1.006335973739624,
+        0.9603840112686157,
+        0.9875199794769287,
+        0.9577599763870239
+      ],
+      "total_samples_ms": [
+        1.8650240302085876,
+        1.8530239462852478,
+        1.8541120290756226,
+        1.841759979724884,
+        1.7772159576416016
+      ],
+      "forward_median_ms": 0.8466879725456238,
+      "backward_median_ms": 0.9875199794769287,
+      "total_median_ms": 1.8530239462852478,
+      "peak_allocated_gib": 0.018747806549072266,
+      "peak_reserved_gib": 0.271484375,
+      "output_l2": null,
+      "gradient_l2": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "comparison": "fla_saved_intermediates_vs_fla_recompute",
+      "output_relative_error": 0.0,
+      "gradient_relative_errors": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "comparison": "fla_safe_gate_saved_intermediates_vs_fla_recompute",
+      "output_relative_error": null,
+      "gradient_relative_errors": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "date": "2026-07-19",
+  "decision": "adopt",
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "dependency": {
+    "repository": "https://github.com/yxanul/flash-linear-attention.git",
+    "commit": "ee8369bb735bcc91aefc967ea911cc75248a1b79",
+    "upstream_commit": "ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17",
+    "version": "0.5.2",
+    "installed_source_sha256": "d036a681ebc1f6ea81b23209d3e89cdab3dd04d83b0d53d29d36616bdb0c0f3d",
+    "install_command": "uv sync --locked --extra cuda",
+    "direct_url_verified": true,
+    "runtime_site_packages_patch": false
+  },
+  "backend_contract": {
+    "patch_version": 1,
+    "dot_precision": "tf32x3",
+    "maximum_guard_span": 232.0,
+    "resolved_backend": "fla.ops.kda.chunk_kda(openkimi_guarded_diagonal_v1,tf32x3,span<=232)",
+    "fail_closed": true
+  },
+  "validation": {
+    "local_full_suite": "passed",
+    "h100_backend_tests": 4,
+    "h100_parity_and_platform_tests": 20,
+    "adversarial_fixtures": 5,
+    "controlled_real_model_kda_mixers": 12,
+    "controlled_real_model_compared_tensors": 204,
+    "controlled_real_model_failed_tensors": 0,
+    "controlled_real_model_maximum_relative_l2": 0.0024894075468182564,
+    "relative_l2_limit": 0.005,
+    "fallbacks_bit_identical": true,
+    "nonfinite_count": 0
+  },
+  "no_regression_benchmark": {
+    "config": "configs/h100-fp8-current-quack-sonic-kda-saved.json",
+    "microbatch_sequences": 32,
+    "sequence_length": 4096,
+    "tokens_per_microstep": 131072,
+    "warmup": 2,
+    "iterations": 7,
+    "milliseconds_per_microstep": 884.8055943080357,
+    "tokens_per_second": 148136.4955682781,
+    "configured_gradient_accumulation_steps": 2,
+    "equivalent_tokens_per_update": 262144,
+    "equivalent_milliseconds_per_update": 1769.6111886160713,
+    "peak_allocated_gib": 47.834463596343994,
+    "prior_selected_tokens_per_second": 146619.00139376163,
+    "change_vs_prior_selected_percent": 1.0349914813845063,
+    "note": "This confirms packaging did not regress throughput. The earlier exact/guarded A/B/A run remains the controlled speedup comparison."
+  },
+  "artifacts": {
+    "raw_validation": "profiles/h100-sm90-kda-pinned-fork-validation-2026-07-19.json",
+    "raw_benchmark": "profiles/h100-sm90-kda-pinned-fork-benchmark-2026-07-19.json",
+    "controlled_exact_comparison": "profiles/h100-sm90-kda-fla-guarded-validation-2026-07-19.json"
+  }
+}

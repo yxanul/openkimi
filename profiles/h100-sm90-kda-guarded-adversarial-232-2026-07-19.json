@@ -1,0 +1,432 @@
+{
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "exact_fallback_threshold": -1.0,
+  "guarded_thresholds": [
+    232.0
+  ],
+  "dot_precision": "tf32x3",
+  "relative_error_limit": 0.005,
+  "absolute_error_limit": 5e-05,
+  "fixtures": [
+    {
+      "name": "near_threshold_accepted",
+      "shape": [
+        2,
+        256,
+        6,
+        128
+      ],
+      "use_gate_in_kernel": true,
+      "expected_fallback": false,
+      "guarded_threshold": 232.0,
+      "passed": true,
+      "metrics": {
+        "output": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.6694061756134033,
+          "actual_l2": 2.6694061756134033,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "q_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.5896124839782715,
+          "actual_l2": 2.5896124839782715,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "k_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.604882001876831,
+          "actual_l2": 2.604882001876831,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "v_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.669039011001587,
+          "actual_l2": 2.669039011001587,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "gate_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 1.055341817846056e-05,
+          "actual_l2": 1.055341817846056e-05,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "beta_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 1.0205408334732056,
+          "actual_l2": 1.0205408334732056,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "a_log_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 7.13173794792965e-05,
+          "actual_l2": 7.13173794792965e-05,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "dt_bias_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 5.3877669415669516e-05,
+          "actual_l2": 5.3877669415669516e-05,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        }
+      }
+    },
+    {
+      "name": "high_decay_fallback",
+      "shape": [
+        2,
+        256,
+        6,
+        128
+      ],
+      "use_gate_in_kernel": true,
+      "expected_fallback": true,
+      "guarded_threshold": 232.0,
+      "passed": true,
+      "metrics": {
+        "output": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.6698689460754395,
+          "actual_l2": 2.6698689460754395,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "q_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.6825661659240723,
+          "actual_l2": 2.6825661659240723,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "k_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.6824915409088135,
+          "actual_l2": 2.6824915409088135,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "v_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 2.662973403930664,
+          "actual_l2": 2.662973403930664,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "gate_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 1.0544990800553933e-05,
+          "actual_l2": 1.0544990800553933e-05,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "beta_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 1.0505274534225464,
+          "actual_l2": 1.0505274534225464,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "a_log_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 0.00020142232824582607,
+          "actual_l2": 0.00020142232824582607,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "dt_bias_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 6.857001426396891e-05,
+          "actual_l2": 6.857001426396891e-05,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        }
+      }
+    },
+    {
+      "name": "cancellation_heavy",
+      "shape": [
+        2,
+        1024,
+        6,
+        128
+      ],
+      "use_gate_in_kernel": true,
+      "expected_fallback": false,
+      "guarded_threshold": 232.0,
+      "passed": true,
+      "metrics": {
+        "output": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 1.3308683932677923e-08,
+          "actual_l2": 1.3308683932677923e-08,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "q_gradient": {
+          "relative_l2": 1.1289333997410722e-05,
+          "max_absolute_error": 3.0517578125e-05,
+          "reference_l2": 5.45771598815918,
+          "actual_l2": 5.4577155113220215,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "k_gradient": {
+          "relative_l2": 1.8389389879303053e-05,
+          "max_absolute_error": 6.103515625e-05,
+          "reference_l2": 5.437710285186768,
+          "actual_l2": 5.437710285186768,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "v_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 1.3306578949823233e-08,
+          "actual_l2": 1.3306578949823233e-08,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "gate_gradient": {
+          "relative_l2": 0.00011316216114209965,
+          "max_absolute_error": 3.0517578125e-05,
+          "reference_l2": 1.3660221099853516,
+          "actual_l2": 1.3660222291946411,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "beta_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 5.110790013418409e-09,
+          "actual_l2": 5.110790013418409e-09,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "a_log_gradient": {
+          "relative_l2": 0.5226593017578125,
+          "max_absolute_error": 9.215425755826345e-09,
+          "reference_l2": 2.4776568352535833e-08,
+          "actual_l2": 3.3972277435623255e-08,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "dt_bias_gradient": {
+          "relative_l2": 0.0006350241601467133,
+          "max_absolute_error": 0.00048828125,
+          "reference_l2": 1.4301384687423706,
+          "actual_l2": 1.4300750494003296,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        }
+      }
+    },
+    {
+      "name": "partial_chunk_4103",
+      "shape": [
+        2,
+        4103,
+        6,
+        128
+      ],
+      "use_gate_in_kernel": true,
+      "expected_fallback": false,
+      "guarded_threshold": 232.0,
+      "passed": true,
+      "metrics": {
+        "output": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 10.714570045471191,
+          "actual_l2": 10.714570045471191,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "q_gradient": {
+          "relative_l2": 1.9199003872927278e-05,
+          "max_absolute_error": 6.103515625e-05,
+          "reference_l2": 10.762297630310059,
+          "actual_l2": 10.762297630310059,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "k_gradient": {
+          "relative_l2": 1.832077032304369e-05,
+          "max_absolute_error": 6.103515625e-05,
+          "reference_l2": 10.766619682312012,
+          "actual_l2": 10.766618728637695,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "v_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 10.728364944458008,
+          "actual_l2": 10.728364944458008,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "gate_gradient": {
+          "relative_l2": 0.0003126800002064556,
+          "max_absolute_error": 1.52587890625e-05,
+          "reference_l2": 0.6896136403083801,
+          "actual_l2": 0.689613401889801,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "beta_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 4.245451927185059,
+          "actual_l2": 4.245451927185059,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "a_log_gradient": {
+          "relative_l2": 0.0005122217698954046,
+          "max_absolute_error": 0.0001868903636932373,
+          "reference_l2": 0.5804153084754944,
+          "actual_l2": 0.5803169012069702,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "dt_bias_gradient": {
+          "relative_l2": 0.0014022112591192126,
+          "max_absolute_error": 0.000244140625,
+          "reference_l2": 0.6868859529495239,
+          "actual_l2": 0.6868546009063721,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        }
+      }
+    },
+    {
+      "name": "nonmonotonic_fallback",
+      "shape": [
+        2,
+        256,
+        6,
+        128
+      ],
+      "use_gate_in_kernel": false,
+      "expected_fallback": true,
+      "guarded_threshold": 232.0,
+      "passed": true,
+      "metrics": {
+        "output": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 4.896729946136475,
+          "actual_l2": 4.896729946136475,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "q_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 4.879636287689209,
+          "actual_l2": 4.879636287689209,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "k_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 4.88882303237915,
+          "actual_l2": 4.88882303237915,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "v_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 4.898693084716797,
+          "actual_l2": 4.898693084716797,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "gate_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 7.147386074066162,
+          "actual_l2": 7.147386074066162,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        },
+        "beta_gradient": {
+          "relative_l2": 0.0,
+          "max_absolute_error": 0.0,
+          "reference_l2": 9.076542854309082,
+          "actual_l2": 9.076542854309082,
+          "reference_nonfinite": 0,
+          "actual_nonfinite": 0,
+          "passed": true
+        }
+      }
+    }
+  ],
+  "real_model": null,
+  "passed": true
+}

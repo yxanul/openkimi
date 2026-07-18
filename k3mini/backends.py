@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from importlib.util import find_spec
+from types import ModuleType
 
 import torch
 
@@ -11,6 +13,10 @@ from .config import (
     LossBackend,
     RoutedExpertBackend,
 )
+
+OPENKIMI_FLA_PATCH_VERSION = 1
+OPENKIMI_FLA_MAX_GUARD_SPAN = 232.0
+OPENKIMI_FLA_DOT_PRECISION = "tf32x3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +63,50 @@ def _cuda_dependencies() -> tuple[bool, list[str]]:
     if find_spec("megablocks") is None or find_spec("grouped_gemm") is None:
         missing.append("megablocks/grouped_gemm")
     return not missing, missing
+
+
+def _validated_kda_backend_name(chunk_intra: ModuleType) -> str:
+    version = getattr(
+        chunk_intra,
+        "OPENKIMI_KDA_GUARDED_DIAGONAL_VERSION",
+        None,
+    )
+    span = getattr(
+        chunk_intra,
+        "_OPENKIMI_GUARD_MAX_LOG2_SPAN",
+        None,
+    )
+    precision = getattr(
+        chunk_intra,
+        "_OPENKIMI_GUARD_DOT_PRECISION",
+        None,
+    )
+    install_hint = (
+        "install the OpenKimi-pinned flash-linear-attention fork with "
+        "`uv sync --extra cuda`"
+    )
+    if version != OPENKIMI_FLA_PATCH_VERSION:
+        raise RuntimeError(
+            "kernel_backend=h100 requires the versioned OpenKimi guarded KDA "
+            f"patch v{OPENKIMI_FLA_PATCH_VERSION}; {install_hint}"
+        )
+    if not isinstance(span, float) or not math.isfinite(span):
+        raise RuntimeError("OpenKimi guarded KDA has an invalid runtime span")
+    if span > OPENKIMI_FLA_MAX_GUARD_SPAN:
+        raise RuntimeError(
+            f"K3MINI_KDA_GUARD_SPAN={span:g} exceeds the validated maximum "
+            f"{OPENKIMI_FLA_MAX_GUARD_SPAN:g}"
+        )
+    if precision != OPENKIMI_FLA_DOT_PRECISION:
+        raise RuntimeError(
+            f"K3MINI_KDA_GUARD_DOT_PRECISION={precision!r} is not validated; "
+            f"use {OPENKIMI_FLA_DOT_PRECISION!r}"
+        )
+    return (
+        "fla.ops.kda.chunk_kda("
+        f"openkimi_guarded_diagonal_v{version},"
+        f"{precision},span<={span:g})"
+    )
 
 
 def _resolve_loss_backend(requested: LossBackend, kernel_backend: KernelBackend) -> LossBackend:
@@ -144,6 +194,9 @@ def resolve_backend(
     elif selected_loss is LossBackend.QUACK:
         raise RuntimeError("loss_backend=quack currently requires linear_precision=fp8_current")
     if selected is KernelBackend.H100:
+        from fla.ops.kda import chunk_intra
+
+        kda_backend_name = _validated_kda_backend_name(chunk_intra)
         loss_name = {
             LossBackend.TORCH: "torch.cross_entropy",
             LossBackend.FLA: "fla.modules.FusedLinearCrossEntropyLoss",
@@ -153,7 +206,7 @@ def resolve_backend(
         return BackendStatus(
             requested=requested,
             selected=selected,
-            kda="fla.ops.kda.chunk_kda",
+            kda=kda_backend_name,
             short_conv="fla.modules.ShortConvolution",
             attnres="fla.ops.attnres.fused_attnres(configurable checkpoint_level)",
             routed_expert_backend=selected_experts,

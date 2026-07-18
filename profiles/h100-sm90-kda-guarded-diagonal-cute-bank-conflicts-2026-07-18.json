@@ -1,0 +1,26 @@
+{
+  "device": "NVIDIA H100 80GB HBM3",
+  "tool": "Nsight Compute 2026.1.1.0",
+  "blocks": 128,
+  "metrics": [
+    "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+    "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum"
+  ],
+  "plain": {
+    "swizzle_bits": 0,
+    "load_bank_conflicts": 36576,
+    "store_bank_conflicts": 115824
+  },
+  "s128": {
+    "swizzle_bits": 3,
+    "load_bank_conflicts": 12192,
+    "store_bank_conflicts": 42672
+  },
+  "reduction": {
+    "load_bank_conflicts": 0.666667,
+    "store_bank_conflicts": 0.631579
+  },
+  "timing_profile": "h100-sm90-kda-guarded-diagonal-cute-swizzle-2026-07-18.json",
+  "full_grid_time_reduction": 0.298096,
+  "notes": "Nsight metrics include every shared-memory instruction in the kernel, not only the three B-operand producer stores. The full-grid timing uses 196608 tiles, 10 warmups, and 30 measured launches outside Nsight Compute."
+}

@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cuda = [
-  "flash-linear-attention[cuda] @ git+https://github.com/fla-org/flash-linear-attention.git@ccb0ff944cbff035fa59ac47a4cc8fd2e079bb17 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "flash-linear-attention[cuda] @ git+https://github.com/yxanul/flash-linear-attention.git@ee8369bb735bcc91aefc967ea911cc75248a1b79 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "grouped-gemm==0.3.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "liger-kernel @ git+https://github.com/linkedin/Liger-Kernel.git@72a4ed47a5c593b58045a0af14d3f774a037bd92 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "megablocks @ git+https://github.com/databricks/megablocks.git@952db33d6eac334d22c61e47a0d5d41446298784 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
@@ -46,6 +46,7 @@ required-version = ">=0.8"
 [tool.uv.extra-build-dependencies]
 megablocks = ["torch==2.7.0"]
 grouped-gemm = ["torch==2.7.0"]
+transformer-engine-torch = ["torch==2.7.0"]
 
 [tool.uv.extra-build-variables]
 grouped-gemm = { GROUPED_GEMM_CUTLASS = "1" }
@@ -63,6 +64,7 @@ markers = [
 target-version = "py311"
 line-length = 110
 extend-exclude = [
+  ".quack-packages",
   "experiments/kda_sm90/original",
   "experiments/kda_sm90/working",
 ]

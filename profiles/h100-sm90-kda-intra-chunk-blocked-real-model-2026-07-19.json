@@ -1,0 +1,1857 @@
+{
+  "device": "NVIDIA H100 80GB HBM3",
+  "torch": "2.7.0+cu126",
+  "config": "configs/h100-fp8-current-quack-sonic-kda-saved.json",
+  "shape": [
+    1,
+    4096
+  ],
+  "capture_loss": 11.925512313842773,
+  "candidate": "blocked coarsened intra",
+  "num_warps": 4,
+  "kda_layer_count": 12,
+  "compared_tensor_count": 204,
+  "maximum_relative_l2": 0.0024311640299856663,
+  "worst_tensor": "layers.13.mixer.parameter.dt_bias",
+  "failed_tensor_count": 0,
+  "failed_tensors": [],
+  "passed": true,
+  "metrics": {
+    "layers.0.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 235.85838317871094,
+      "actual_l2": 235.85838317871094,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.input_gradient": {
+      "relative_l2": 0.00015892992087174207,
+      "max_absolute_error": 1.9073486328125e-06,
+      "reference_l2": 0.12301025539636612,
+      "actual_l2": 0.12301024794578552,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.A_log": {
+      "relative_l2": 0.0002264192298753187,
+      "max_absolute_error": 1.2954697012901306e-06,
+      "reference_l2": 0.008678989484906197,
+      "actual_l2": 0.008680202066898346,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.dt_bias": {
+      "relative_l2": 0.00015022010484244674,
+      "max_absolute_error": 3.708191798068583e-07,
+      "reference_l2": 0.012633965350687504,
+      "actual_l2": 0.012634040787816048,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.0001114590631914325,
+      "max_absolute_error": 0.0001220703125,
+      "reference_l2": 3.6889469623565674,
+      "actual_l2": 3.6889476776123047,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00011580691352719441,
+      "max_absolute_error": 0.0001220703125,
+      "reference_l2": 3.6684720516204834,
+      "actual_l2": 3.668471097946167,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 3.210952043533325,
+      "actual_l2": 3.210952043533325,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.q_conv.weight": {
+      "relative_l2": 1.4882024515827652e-05,
+      "max_absolute_error": 1.7650891095399857e-06,
+      "reference_l2": 0.2563868761062622,
+      "actual_l2": 0.2563868463039398,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.k_conv.weight": {
+      "relative_l2": 1.61319494509371e-05,
+      "max_absolute_error": 1.6344711184501648e-06,
+      "reference_l2": 0.2607726752758026,
+      "actual_l2": 0.26077279448509216,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.2277793288230896,
+      "actual_l2": 0.2277793288230896,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0012448328780010343,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.06971747428178787,
+      "actual_l2": 0.0697171539068222,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0005391148733906448,
+      "max_absolute_error": 1.52587890625e-05,
+      "reference_l2": 0.07079844921827316,
+      "actual_l2": 0.07079935073852539,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.5375387072563171,
+      "actual_l2": 0.5375387072563171,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.19677883386611938,
+      "actual_l2": 0.19677883386611938,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.19574862718582153,
+      "actual_l2": 0.19574862718582153,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.06139339134097099,
+      "actual_l2": 0.06139339134097099,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.0.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 3.176541805267334,
+      "actual_l2": 3.176541805267334,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 228.0529022216797,
+      "actual_l2": 228.0529022216797,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.input_gradient": {
+      "relative_l2": 0.00012727617286145687,
+      "max_absolute_error": 9.5367431640625e-07,
+      "reference_l2": 0.04784431308507919,
+      "actual_l2": 0.04784431681036949,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.A_log": {
+      "relative_l2": 0.0012578788446262479,
+      "max_absolute_error": 9.308423614129424e-07,
+      "reference_l2": 0.001202559215016663,
+      "actual_l2": 0.0012030305806547403,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0006541500333696604,
+      "max_absolute_error": 1.4512983170789084e-07,
+      "reference_l2": 0.0011845730477944016,
+      "actual_l2": 0.0011845260160043836,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.q_proj.weight": {
+      "relative_l2": 9.612962458049878e-05,
+      "max_absolute_error": 3.0517578125e-05,
+      "reference_l2": 1.4156852960586548,
+      "actual_l2": 1.4156849384307861,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.k_proj.weight": {
+      "relative_l2": 6.855429091956466e-05,
+      "max_absolute_error": 3.0517578125e-05,
+      "reference_l2": 1.4174144268035889,
+      "actual_l2": 1.4174143075942993,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 1.288567304611206,
+      "actual_l2": 1.288567304611206,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.q_conv.weight": {
+      "relative_l2": 1.735596015350893e-05,
+      "max_absolute_error": 7.168855518102646e-07,
+      "reference_l2": 0.09866862744092941,
+      "actual_l2": 0.09866858273744583,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.k_conv.weight": {
+      "relative_l2": 9.537286132399458e-06,
+      "max_absolute_error": 3.296881914138794e-07,
+      "reference_l2": 0.09436532855033875,
+      "actual_l2": 0.09436533600091934,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.09082400053739548,
+      "actual_l2": 0.09082400053739548,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0017621584702283144,
+      "max_absolute_error": 4.76837158203125e-07,
+      "reference_l2": 0.00722843874245882,
+      "actual_l2": 0.007228238973766565,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0009180430788546801,
+      "max_absolute_error": 9.5367431640625e-07,
+      "reference_l2": 0.007235975004732609,
+      "actual_l2": 0.007235829718410969,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.22240395843982697,
+      "actual_l2": 0.22240395843982697,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.07891279458999634,
+      "actual_l2": 0.07891279458999634,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.07881925255060196,
+      "actual_l2": 0.07881925255060196,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.023974154144525528,
+      "actual_l2": 0.023974154144525528,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.1.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 1.2704033851623535,
+      "actual_l2": 1.2704033851623535,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 230.04013061523438,
+      "actual_l2": 230.04013061523438,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.input_gradient": {
+      "relative_l2": 0.00015616090968251228,
+      "max_absolute_error": 4.76837158203125e-07,
+      "reference_l2": 0.027709098532795906,
+      "actual_l2": 0.027709096670150757,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.A_log": {
+      "relative_l2": 0.0007541211671195924,
+      "max_absolute_error": 6.609075171581935e-07,
+      "reference_l2": 0.001160163781605661,
+      "actual_l2": 0.0011600963771343231,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0006346910959109664,
+      "max_absolute_error": 8.663391781738028e-08,
+      "reference_l2": 0.0008299691835418344,
+      "actual_l2": 0.0008299925830215216,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00013055498129688203,
+      "max_absolute_error": 1.52587890625e-05,
+      "reference_l2": 0.810644268989563,
+      "actual_l2": 0.8106444478034973,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00013962491357233375,
+      "max_absolute_error": 3.0517578125e-05,
+      "reference_l2": 0.8111935257911682,
+      "actual_l2": 0.8111929297447205,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.7691671848297119,
+      "actual_l2": 0.7691671848297119,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.q_conv.weight": {
+      "relative_l2": 1.939409048645757e-05,
+      "max_absolute_error": 6.065238267183304e-07,
+      "reference_l2": 0.056578196585178375,
+      "actual_l2": 0.05657817795872688,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.k_conv.weight": {
+      "relative_l2": 2.3093438358046114e-05,
+      "max_absolute_error": 6.860354915261269e-07,
+      "reference_l2": 0.056604355573654175,
+      "actual_l2": 0.05660436302423477,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.0538412481546402,
+      "actual_l2": 0.0538412481546402,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0015792762860655785,
+      "max_absolute_error": 4.76837158203125e-07,
+      "reference_l2": 0.005414753220975399,
+      "actual_l2": 0.005414819344878197,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0007552906172350049,
+      "max_absolute_error": 9.5367431640625e-07,
+      "reference_l2": 0.005478102248162031,
+      "actual_l2": 0.0054780528880655766,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.12985222041606903,
+      "actual_l2": 0.12985222041606903,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.04771094769239426,
+      "actual_l2": 0.04771094769239426,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.04727287217974663,
+      "actual_l2": 0.04727287217974663,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.01612243615090847,
+      "actual_l2": 0.01612243615090847,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.2.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.7598825097084045,
+      "actual_l2": 0.7598825097084045,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 229.95541381835938,
+      "actual_l2": 229.95541381835938,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.input_gradient": {
+      "relative_l2": 0.00016034864529501647,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.017682701349258423,
+      "actual_l2": 0.01768270507454872,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.A_log": {
+      "relative_l2": 0.0006119664758443832,
+      "max_absolute_error": 1.6424746718257666e-07,
+      "reference_l2": 0.0003353639040142298,
+      "actual_l2": 0.0003352806670591235,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0008223316981457174,
+      "max_absolute_error": 3.910213308699895e-08,
+      "reference_l2": 0.00033134405384771526,
+      "actual_l2": 0.0003313475172035396,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.0001286080660065636,
+      "max_absolute_error": 1.52587890625e-05,
+      "reference_l2": 0.5138657093048096,
+      "actual_l2": 0.5138657093048096,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00014547935279551893,
+      "max_absolute_error": 1.52587890625e-05,
+      "reference_l2": 0.5149022340774536,
+      "actual_l2": 0.5149021148681641,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.4933823347091675,
+      "actual_l2": 0.4933823347091675,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.q_conv.weight": {
+      "relative_l2": 2.0776800738531165e-05,
+      "max_absolute_error": 2.6728957891464233e-07,
+      "reference_l2": 0.03565951809287071,
+      "actual_l2": 0.035659532994031906,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.k_conv.weight": {
+      "relative_l2": 2.6867221095017157e-05,
+      "max_absolute_error": 6.714253686368465e-07,
+      "reference_l2": 0.035849086940288544,
+      "actual_l2": 0.035849086940288544,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.034663379192352295,
+      "actual_l2": 0.034663379192352295,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0019394904375076294,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.0022096745669841766,
+      "actual_l2": 0.00220964546315372,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0010586210992187262,
+      "max_absolute_error": 4.76837158203125e-07,
+      "reference_l2": 0.0022246502339839935,
+      "actual_l2": 0.0022246355656534433,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.08406195789575577,
+      "actual_l2": 0.08406195789575577,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.030154913663864136,
+      "actual_l2": 0.030154913663864136,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.030233163386583328,
+      "actual_l2": 0.030233163386583328,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.008578366599977016,
+      "actual_l2": 0.008578366599977016,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.4.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.48691660165786743,
+      "actual_l2": 0.48691660165786743,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 233.0467071533203,
+      "actual_l2": 233.0467071533203,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.input_gradient": {
+      "relative_l2": 0.00013470914564095438,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.01346897054463625,
+      "actual_l2": 0.013468969613313675,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.A_log": {
+      "relative_l2": 0.0007345053018070757,
+      "max_absolute_error": 3.166492206219118e-07,
+      "reference_l2": 0.0004743137978948653,
+      "actual_l2": 0.00047428245306946337,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0009649480343796313,
+      "max_absolute_error": 3.669134684969322e-08,
+      "reference_l2": 0.000218791319639422,
+      "actual_l2": 0.0002188048092648387,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00012069306831108406,
+      "max_absolute_error": 1.52587890625e-05,
+      "reference_l2": 0.39367279410362244,
+      "actual_l2": 0.3936725854873657,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00011320025805616751,
+      "max_absolute_error": 7.62939453125e-06,
+      "reference_l2": 0.39211341738700867,
+      "actual_l2": 0.39211341738700867,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.3715672194957733,
+      "actual_l2": 0.3715672194957733,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.q_conv.weight": {
+      "relative_l2": 2.4045521058724262e-05,
+      "max_absolute_error": 4.4095213524997234e-07,
+      "reference_l2": 0.02752796746790409,
+      "actual_l2": 0.02752796746790409,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.k_conv.weight": {
+      "relative_l2": 1.987999348784797e-05,
+      "max_absolute_error": 2.037850208580494e-07,
+      "reference_l2": 0.027837440371513367,
+      "actual_l2": 0.02783743105828762,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.02583862654864788,
+      "actual_l2": 0.02583862654864788,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0018970838282257318,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.00139991648029536,
+      "actual_l2": 0.00139991648029536,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0010700299171730876,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.0013943299418315291,
+      "actual_l2": 0.0013943248195573688,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.06166169419884682,
+      "actual_l2": 0.06166169419884682,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.023002097383141518,
+      "actual_l2": 0.023002097383141518,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.022978195920586586,
+      "actual_l2": 0.022978195920586586,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.007160739041864872,
+      "actual_l2": 0.007160739041864872,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.5.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.36820822954177856,
+      "actual_l2": 0.36820822954177856,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 232.39857482910156,
+      "actual_l2": 232.39857482910156,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.input_gradient": {
+      "relative_l2": 0.00015254266327247024,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.010480603203177452,
+      "actual_l2": 0.010480605997145176,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.A_log": {
+      "relative_l2": 0.0007329888176172972,
+      "max_absolute_error": 1.991068074858049e-07,
+      "reference_l2": 0.00032685475889593363,
+      "actual_l2": 0.0003268772270530462,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0008693363633938134,
+      "max_absolute_error": 5.729772567519831e-08,
+      "reference_l2": 0.00023481293465010822,
+      "actual_l2": 0.00023481088283006102,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00010740497236838564,
+      "max_absolute_error": 7.62939453125e-06,
+      "reference_l2": 0.3057222366333008,
+      "actual_l2": 0.30572235584259033,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00013627589214593172,
+      "max_absolute_error": 7.62939453125e-06,
+      "reference_l2": 0.305521160364151,
+      "actual_l2": 0.3055211901664734,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.29128241539001465,
+      "actual_l2": 0.29128241539001465,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.q_conv.weight": {
+      "relative_l2": 1.4640869267168455e-05,
+      "max_absolute_error": 1.394655555486679e-07,
+      "reference_l2": 0.02118680067360401,
+      "actual_l2": 0.021186813712120056,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.k_conv.weight": {
+      "relative_l2": 2.8846510758739896e-05,
+      "max_absolute_error": 3.1196395866572857e-07,
+      "reference_l2": 0.021130383014678955,
+      "actual_l2": 0.021130388602614403,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.02088514342904091,
+      "actual_l2": 0.02088514342904091,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0018397687235847116,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.001460856175981462,
+      "actual_l2": 0.0014608533820137382,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0009621447534300387,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.0014645163901150227,
+      "actual_l2": 0.0014645126648247242,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.04889019951224327,
+      "actual_l2": 0.04889019951224327,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.018009943887591362,
+      "actual_l2": 0.018009943887591362,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.017919229343533516,
+      "actual_l2": 0.017919229343533516,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.005394586827605963,
+      "actual_l2": 0.005394586827605963,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.6.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.2876532971858978,
+      "actual_l2": 0.2876532971858978,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 232.00643920898438,
+      "actual_l2": 232.00643920898438,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.input_gradient": {
+      "relative_l2": 0.00014593495870940387,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.008188698440790176,
+      "actual_l2": 0.008188698440790176,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.A_log": {
+      "relative_l2": 0.00147634232416749,
+      "max_absolute_error": 9.843643056228757e-08,
+      "reference_l2": 9.947261423803866e-05,
+      "actual_l2": 9.951026731869206e-05,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0010860139736905694,
+      "max_absolute_error": 2.693468559300527e-08,
+      "reference_l2": 0.00014059137902222574,
+      "actual_l2": 0.0001405854563927278,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00012785865692421794,
+      "max_absolute_error": 7.62939453125e-06,
+      "reference_l2": 0.2379181832075119,
+      "actual_l2": 0.23791803419589996,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00011734132567653432,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.238740935921669,
+      "actual_l2": 0.23874089121818542,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.22898514568805695,
+      "actual_l2": 0.22898514568805695,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.q_conv.weight": {
+      "relative_l2": 2.9911638193880208e-05,
+      "max_absolute_error": 3.0355295166373253e-07,
+      "reference_l2": 0.01592598855495453,
+      "actual_l2": 0.01592598482966423,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.k_conv.weight": {
+      "relative_l2": 1.58690418174956e-05,
+      "max_absolute_error": 1.0577787179499865e-07,
+      "reference_l2": 0.016534527763724327,
+      "actual_l2": 0.016534527763724327,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.016155632212758064,
+      "actual_l2": 0.016155632212758064,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0018462175503373146,
+      "max_absolute_error": 5.960464477539063e-08,
+      "reference_l2": 0.0009082545875571668,
+      "actual_l2": 0.0009082385222427547,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0010043819202110171,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.0008974584052339196,
+      "actual_l2": 0.0008974532247520983,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.038650788366794586,
+      "actual_l2": 0.038650788366794586,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.014055857434868813,
+      "actual_l2": 0.014055857434868813,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.014106713235378265,
+      "actual_l2": 0.014106713235378265,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.004103485494852066,
+      "actual_l2": 0.004103485494852066,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.8.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.2258930504322052,
+      "actual_l2": 0.2258930504322052,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 229.53260803222656,
+      "actual_l2": 229.53260803222656,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.input_gradient": {
+      "relative_l2": 0.00016756661352701485,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.006828907411545515,
+      "actual_l2": 0.006828907877206802,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.A_log": {
+      "relative_l2": 0.00022826259373687208,
+      "max_absolute_error": 9.13569238036871e-08,
+      "reference_l2": 0.0005400722729973495,
+      "actual_l2": 0.000540077337063849,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.dt_bias": {
+      "relative_l2": 0.00031919151660986245,
+      "max_absolute_error": 1.4812712834100239e-08,
+      "reference_l2": 0.00031579280039295554,
+      "actual_l2": 0.00031579742790199816,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00012729933951050043,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.1988314837217331,
+      "actual_l2": 0.1988314390182495,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00011456328502390534,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.19908681511878967,
+      "actual_l2": 0.1990867555141449,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.19081473350524902,
+      "actual_l2": 0.19081473350524902,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.q_conv.weight": {
+      "relative_l2": 2.6426110707689077e-05,
+      "max_absolute_error": 2.6324414648115635e-07,
+      "reference_l2": 0.014002935960888863,
+      "actual_l2": 0.014002921991050243,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.k_conv.weight": {
+      "relative_l2": 1.2512438843259588e-05,
+      "max_absolute_error": 7.005291990935802e-08,
+      "reference_l2": 0.013958249241113663,
+      "actual_l2": 0.013958245515823364,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.013363308273255825,
+      "actual_l2": 0.013363308273255825,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0015471738297492266,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.0020188242197036743,
+      "actual_l2": 0.002018839120864868,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0007469317642971873,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.0020057016517966986,
+      "actual_l2": 0.0020056988578289747,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.032200299203395844,
+      "actual_l2": 0.032200299203395844,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.011697116307914257,
+      "actual_l2": 0.011697116307914257,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.011752652935683727,
+      "actual_l2": 0.011752652935683727,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.0038186528254300356,
+      "actual_l2": 0.0038186528254300356,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.9.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.18842297792434692,
+      "actual_l2": 0.18842297792434692,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 233.11370849609375,
+      "actual_l2": 233.11370849609375,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.input_gradient": {
+      "relative_l2": 0.00016663457790855318,
+      "max_absolute_error": 5.960464477539063e-08,
+      "reference_l2": 0.005895103793591261,
+      "actual_l2": 0.005895103327929974,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.A_log": {
+      "relative_l2": 0.0002954053634312004,
+      "max_absolute_error": 1.0731605470937211e-07,
+      "reference_l2": 0.0004598635423462838,
+      "actual_l2": 0.00045987305929884315,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0004775647830683738,
+      "max_absolute_error": 1.5631869132448628e-08,
+      "reference_l2": 0.00021418198593892157,
+      "actual_l2": 0.00021418026881292462,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00014119209663476795,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.17135140299797058,
+      "actual_l2": 0.1713513880968094,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00013274737284518778,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.17183087766170502,
+      "actual_l2": 0.1718309074640274,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.16558299958705902,
+      "actual_l2": 0.16558299958705902,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.q_conv.weight": {
+      "relative_l2": 2.231069993285928e-05,
+      "max_absolute_error": 9.010545909404755e-08,
+      "reference_l2": 0.011976465582847595,
+      "actual_l2": 0.011976465582847595,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.k_conv.weight": {
+      "relative_l2": 2.2405580239137635e-05,
+      "max_absolute_error": 1.4678516890853643e-07,
+      "reference_l2": 0.011758364737033844,
+      "actual_l2": 0.011758360080420971,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.011666364967823029,
+      "actual_l2": 0.011666364967823029,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0015558006707578897,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.0013833915581926703,
+      "actual_l2": 0.0013833754928782582,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0007569912122562528,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.0013735884567722678,
+      "actual_l2": 0.0013735872926190495,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.027081238105893135,
+      "actual_l2": 0.027081238105893135,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.010129213333129883,
+      "actual_l2": 0.010129213333129883,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.010206243023276329,
+      "actual_l2": 0.010206243023276329,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.003727892180904746,
+      "actual_l2": 0.003727892180904746,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.10.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.1630508303642273,
+      "actual_l2": 0.1630508303642273,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 233.26626586914062,
+      "actual_l2": 233.26626586914062,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.input_gradient": {
+      "relative_l2": 0.00019456548034213483,
+      "max_absolute_error": 5.960464477539063e-08,
+      "reference_l2": 0.005001679062843323,
+      "actual_l2": 0.0050016785971820354,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.A_log": {
+      "relative_l2": 0.00011402510426705703,
+      "max_absolute_error": 5.529807367565809e-08,
+      "reference_l2": 0.0005231824470683932,
+      "actual_l2": 0.0005231865798123181,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.dt_bias": {
+      "relative_l2": 0.00013887153181713074,
+      "max_absolute_error": 3.1868694350123405e-08,
+      "reference_l2": 0.0005967247998341918,
+      "actual_l2": 0.0005967355100437999,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.q_proj.weight": {
+      "relative_l2": 0.00015179110050667077,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.14570017158985138,
+      "actual_l2": 0.14570005238056183,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00014485794235952199,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.14583145081996918,
+      "actual_l2": 0.14583145081996918,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.13955621421337128,
+      "actual_l2": 0.13955621421337128,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.q_conv.weight": {
+      "relative_l2": 2.0528681488940492e-05,
+      "max_absolute_error": 7.043126970529556e-08,
+      "reference_l2": 0.01013648696243763,
+      "actual_l2": 0.010136496275663376,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.k_conv.weight": {
+      "relative_l2": 2.837279134837445e-05,
+      "max_absolute_error": 1.5090336091816425e-07,
+      "reference_l2": 0.01031976006925106,
+      "actual_l2": 0.01031974982470274,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.009857332333922386,
+      "actual_l2": 0.009857332333922386,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0012632645666599274,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.0035244165919721127,
+      "actual_l2": 0.0035244012251496315,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0004975430201739073,
+      "max_absolute_error": 2.384185791015625e-07,
+      "reference_l2": 0.003508909372612834,
+      "actual_l2": 0.00350890657864511,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.02475549280643463,
+      "actual_l2": 0.02475549280643463,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.008551075123250484,
+      "actual_l2": 0.008551075123250484,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.008616512641310692,
+      "actual_l2": 0.008616512641310692,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.0027134998235851526,
+      "actual_l2": 0.0027134998235851526,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.12.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.1378004252910614,
+      "actual_l2": 0.1378004252910614,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 229.8075408935547,
+      "actual_l2": 229.8075408935547,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.input_gradient": {
+      "relative_l2": 0.00012753323244396597,
+      "max_absolute_error": 5.960464477539063e-08,
+      "reference_l2": 0.004318867344409227,
+      "actual_l2": 0.004318867810070515,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.A_log": {
+      "relative_l2": 0.0008724586223252118,
+      "max_absolute_error": 1.036049752656254e-07,
+      "reference_l2": 0.00016289399354718626,
+      "actual_l2": 0.0001629062317078933,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.dt_bias": {
+      "relative_l2": 0.0024311640299856663,
+      "max_absolute_error": 4.351037219407772e-08,
+      "reference_l2": 6.439143908210099e-05,
+      "actual_l2": 6.439199205487967e-05,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.q_proj.weight": {
+      "relative_l2": 9.345483704237267e-05,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.12545470893383026,
+      "actual_l2": 0.12545469403266907,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00011458425433374941,
+      "max_absolute_error": 3.814697265625e-06,
+      "reference_l2": 0.12466217577457428,
+      "actual_l2": 0.12466214597225189,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.12191951274871826,
+      "actual_l2": 0.12191951274871826,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.q_conv.weight": {
+      "relative_l2": 1.3950194443168584e-05,
+      "max_absolute_error": 6.02740328758955e-08,
+      "reference_l2": 0.008637979626655579,
+      "actual_l2": 0.008637979626655579,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.k_conv.weight": {
+      "relative_l2": 1.5416053429362364e-05,
+      "max_absolute_error": 5.192123353481293e-08,
+      "reference_l2": 0.008600963279604912,
+      "actual_l2": 0.008600964210927486,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.008717874996364117,
+      "actual_l2": 0.008717874996364117,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.002078563440591097,
+      "max_absolute_error": 2.9802322387695312e-08,
+      "reference_l2": 0.0003941563772968948,
+      "actual_l2": 0.000394160277210176,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.001141002168878913,
+      "max_absolute_error": 5.960464477539063e-08,
+      "reference_l2": 0.00038854958256706595,
+      "actual_l2": 0.0003885497571900487,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.02073807455599308,
+      "actual_l2": 0.02073807455599308,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.007513806689530611,
+      "actual_l2": 0.007513806689530611,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.007456264924257994,
+      "actual_l2": 0.007456264924257994,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.0024483685847371817,
+      "actual_l2": 0.0024483685847371817,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.13.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.12022189050912857,
+      "actual_l2": 0.12022189050912857,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.output": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 230.07135009765625,
+      "actual_l2": 230.07135009765625,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.input_gradient": {
+      "relative_l2": 0.0001651287020649761,
+      "max_absolute_error": 5.960464477539063e-08,
+      "reference_l2": 0.003881926415488124,
+      "actual_l2": 0.0038819261826574802,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.A_log": {
+      "relative_l2": 0.0003191953874193132,
+      "max_absolute_error": 9.961024716176325e-08,
+      "reference_l2": 0.0004884947557002306,
+      "actual_l2": 0.000488481717184186,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.dt_bias": {
+      "relative_l2": 0.00046062227920629084,
+      "max_absolute_error": 4.2324877824739815e-08,
+      "reference_l2": 0.0002269659744342789,
+      "actual_l2": 0.00022696649830322713,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.q_proj.weight": {
+      "relative_l2": 8.950332266977057e-05,
+      "max_absolute_error": 1.9073486328125e-06,
+      "reference_l2": 0.1128486916422844,
+      "actual_l2": 0.11284871399402618,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.k_proj.weight": {
+      "relative_l2": 0.00013936616596765816,
+      "max_absolute_error": 1.9073486328125e-06,
+      "reference_l2": 0.11289678514003754,
+      "actual_l2": 0.11289678514003754,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.v_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.10896126925945282,
+      "actual_l2": 0.10896126925945282,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.q_conv.weight": {
+      "relative_l2": 1.7020152881741524e-05,
+      "max_absolute_error": 4.6711647883057594e-08,
+      "reference_l2": 0.007792945485562086,
+      "actual_l2": 0.007792949210852385,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.k_conv.weight": {
+      "relative_l2": 2.461140502418857e-05,
+      "max_absolute_error": 9.761424735188484e-08,
+      "reference_l2": 0.0077232057228684425,
+      "actual_l2": 0.007723201997578144,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.v_conv.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.0076166666112840176,
+      "actual_l2": 0.0076166666112840176,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.f_a_proj.weight": {
+      "relative_l2": 0.0014542203862220049,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.0014237068826332688,
+      "actual_l2": 0.001423691282980144,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.f_b_proj.weight": {
+      "relative_l2": 0.0006618663901463151,
+      "max_absolute_error": 1.1920928955078125e-07,
+      "reference_l2": 0.001435648649930954,
+      "actual_l2": 0.0014356463216245174,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.beta_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.017992330715060234,
+      "actual_l2": 0.017992330715060234,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.out_gate_a.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.0067098625004291534,
+      "actual_l2": 0.0067098625004291534,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.out_gate_b.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.006692638620734215,
+      "actual_l2": 0.006692638620734215,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.out_norm_gate.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.001994880847632885,
+      "actual_l2": 0.001994880847632885,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    },
+    "layers.14.mixer.parameter.out_proj.weight": {
+      "relative_l2": 0.0,
+      "max_absolute_error": 0.0,
+      "reference_l2": 0.10728545486927032,
+      "actual_l2": 0.10728545486927032,
+      "reference_nonfinite": 0,
+      "actual_nonfinite": 0,
+      "passed": true
+    }
+  }
+}
