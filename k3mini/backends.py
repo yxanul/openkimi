@@ -115,7 +115,7 @@ def resolve_backend(
             selected=selected,
             kda="fla.ops.kda.chunk_kda",
             short_conv="fla.modules.ShortConvolution",
-            attnres="fla.ops.attnres.fused_attnres(checkpoint_level=1)",
+            attnres="fla.ops.attnres.fused_attnres(configurable checkpoint_level)",
             expert_mlp="megablocks.permute+device_counts+grouped_gemm",
             linear_precision=linear_precision,
             dense_ffn=(

@@ -1,0 +1,211 @@
+{
+  "date": "2026-07-18",
+  "hardware": {
+    "host": "gpu-ubuntu-12cpu-240gb-fi-hel2",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "driver": "595.58.03",
+    "system_cuda": "13.2",
+    "build_cuda": "12.6.85",
+    "torch": "2.7.0+cu126",
+    "transformer_engine": "2.16.0",
+    "fla": "0.5.2",
+    "nsight_systems": "2025.6.3"
+  },
+  "conditions": {
+    "openkimi_baseline_commit": "3bc72c4fbcfacac3a4042aeeec90a6627ea25962",
+    "sequence_length": 4096,
+    "global_batch_tokens": 262144,
+    "precision": "BF16 attention and routed experts with TE FP8 Current Scaling linears",
+    "optimizer": "AdamW with FP32 parameters and states",
+    "torch_compile": false,
+    "activation_checkpointing_scope": "separate outer attention and FFN policies",
+    "synthetic_static_cuda_inputs": true
+  },
+  "baseline_reproduction": {
+    "previous_tokens_per_second": 115548.21321554482,
+    "clean_instance_tokens_per_second": 116134.6486455325,
+    "clean_instance_elapsed_ms": 2257.241943359375,
+    "clean_instance_peak_allocated_gib": 35.136454582214355,
+    "difference_from_previous_percent": 0.5075187608556404,
+    "decision": "Baseline reproduced."
+  },
+  "policy_matrix": [
+    {
+      "name": "A: current repeated baseline",
+      "microbatch_sequences": 64,
+      "gradient_accumulation_steps": 1,
+      "checkpoint_attention": true,
+      "checkpoint_ffn": true,
+      "attnres_checkpoint_level": 1,
+      "elapsed_samples_ms": [
+        2255.9296875,
+        2256.037109375,
+        2348.107666015625,
+        2255.8115234375,
+        2256.18603515625
+      ],
+      "median_elapsed_ms": 2256.037109375,
+      "tokens_per_second": 116196.67021905635,
+      "peak_allocated_gib": 35.134501457214355,
+      "peak_reserved_gib": 38.01953125
+    },
+    {
+      "name": "B: attention checkpoint removed at batch 64",
+      "microbatch_sequences": 64,
+      "gradient_accumulation_steps": 1,
+      "checkpoint_attention": false,
+      "checkpoint_ffn": true,
+      "attnres_checkpoint_level": 1,
+      "result": "OOM",
+      "allocated_gib_before_failure": 77.17,
+      "failed_allocation_mib": 768
+    },
+    {
+      "name": "C: FFN checkpoint removed at batch 64",
+      "microbatch_sequences": 64,
+      "gradient_accumulation_steps": 1,
+      "checkpoint_attention": true,
+      "checkpoint_ffn": false,
+      "attnres_checkpoint_level": 1,
+      "result": "OOM",
+      "allocated_gib_before_failure": 77.45,
+      "failed_allocation_mib": 384
+    },
+    {
+      "name": "D: both checkpoints removed at batch 32",
+      "microbatch_sequences": 32,
+      "gradient_accumulation_steps": 2,
+      "checkpoint_attention": false,
+      "checkpoint_ffn": false,
+      "attnres_checkpoint_level": 1,
+      "result": "OOM",
+      "allocated_gib_before_failure": 77.3,
+      "failed_allocation_mib": 384
+    },
+    {
+      "name": "E: FFN checkpoint removed",
+      "microbatch_sequences": 32,
+      "gradient_accumulation_steps": 2,
+      "checkpoint_attention": true,
+      "checkpoint_ffn": false,
+      "attnres_checkpoint_level": 1,
+      "elapsed_samples_ms": [
+        2152.819580078125,
+        2154.240966796875,
+        2154.65234375
+      ],
+      "median_elapsed_ms": 2154.240966796875,
+      "tokens_per_second": 121687.40825209538,
+      "throughput_change_vs_repeated_baseline_percent": 4.725383285672291,
+      "latency_change_vs_repeated_baseline_percent": -4.5121661410226555,
+      "peak_allocated_gib": 60.84172344207764,
+      "peak_reserved_gib": 62.451171875
+    },
+    {
+      "name": "F: attention checkpoint removed",
+      "microbatch_sequences": 32,
+      "gradient_accumulation_steps": 2,
+      "checkpoint_attention": false,
+      "checkpoint_ffn": true,
+      "attnres_checkpoint_level": 1,
+      "elapsed_samples_ms": [
+        2191.241943359375,
+        2192.126220703125,
+        2191.943603515625
+      ],
+      "median_elapsed_ms": 2191.943603515625,
+      "tokens_per_second": 119594.31783717028,
+      "throughput_change_vs_repeated_baseline_percent": 2.924049038331833,
+      "peak_allocated_gib": 54.32490301132202,
+      "peak_reserved_gib": 56.6796875
+    },
+    {
+      "name": "G: both checkpoints removed",
+      "microbatch_sequences": 16,
+      "gradient_accumulation_steps": 4,
+      "checkpoint_attention": false,
+      "checkpoint_ffn": false,
+      "attnres_checkpoint_level": 1,
+      "elapsed_samples_ms": [
+        2177.274658203125,
+        2177.1865234375,
+        2177.015625
+      ],
+      "median_elapsed_ms": 2177.1865234375,
+      "tokens_per_second": 120404.93415608142,
+      "throughput_change_vs_repeated_baseline_percent": 3.6216734344379775,
+      "peak_allocated_gib": 50.75618553161621,
+      "peak_reserved_gib": 52.19921875
+    },
+    {
+      "name": "H: winning policy with AttnRes level 0",
+      "microbatch_sequences": 32,
+      "gradient_accumulation_steps": 2,
+      "checkpoint_attention": true,
+      "checkpoint_ffn": false,
+      "attnres_checkpoint_level": 0,
+      "elapsed_samples_ms": [
+        2238.870361328125,
+        2150.51904296875,
+        2150.866943359375
+      ],
+      "median_elapsed_ms": 2150.866943359375,
+      "tokens_per_second": 121878.2969394495,
+      "throughput_change_vs_level_1_policy_percent": 0.15686806884624982,
+      "peak_allocated_gib": 64.02241802215576,
+      "peak_reserved_gib": 65.908203125,
+      "decision": "Reject level 0: improvement is below the 1% gate and costs 3.18 GiB."
+    }
+  ],
+  "nsight_winning_policy": {
+    "trace_file_on_test_host": "profiles/h100-checkpoint-winner-2026-07-18.nsys-rep",
+    "elapsed_ms": 2165.979736328125,
+    "tokens_per_second": 121027.90972753946,
+    "gpu_kernel_time_ms": 2134.792262,
+    "kernel_launches": 14757,
+    "attnres_forward_launches": 98,
+    "attnres_backward_dv_launches": 66,
+    "launch_interpretation": "Two microsteps contain 66 original AttnRes reads plus 32 attention-only checkpoint replays. FFN replay removal avoids another 32 AttnRes forwards.",
+    "liger_ce_launches": 256,
+    "note": "The two 32-sequence microsteps double the CE chunks relative to the batch-64 baseline; LM-head chunk tuning is the next experiment."
+  },
+  "verification": {
+    "macos_tests": "18 passed, 10 skipped",
+    "macos_ruff": "passed",
+    "h100_cpu_and_platform_suite": "passed with platform-gated skips",
+    "h100_gpu_tests": "9 passed",
+    "optimizer_updates": "All measured configurations that fit completed warmed AdamW updates with finite loss and gradients.",
+    "winning_policy_ten_update_stability": {
+      "elapsed_samples_ms": [
+        2152.89111328125,
+        2154.18505859375,
+        2154.309326171875,
+        2154.453125,
+        2154.25537109375,
+        2154.328369140625,
+        2154.605712890625,
+        2154.416259765625,
+        2154.8125,
+        2154.921875
+      ],
+      "median_elapsed_ms": 2154.372314453125,
+      "tokens_per_second": 121679.98922068573,
+      "peak_allocated_gib": 60.84172344207764,
+      "peak_reserved_gib": 62.451171875,
+      "result": "10 consecutive measured AdamW updates completed with stable latency and finite state."
+    }
+  },
+  "decision": {
+    "adopt_candidate": "microbatch 32, accumulation 2, attention checkpointing on, FFN checkpointing off, AttnRes checkpoint level 1",
+    "expected_tokens_per_second": 121687.40825209538,
+    "expected_improvement_percent": 4.725383285672291,
+    "config": "configs/h100-fp8-current-checkpoint-optimized.json",
+    "next_experiment": "Tune the FP8 LM-head token chunk before comparing QuACK.",
+    "saved_config_reproduction": {
+      "median_elapsed_ms": 2157.1962890625,
+      "tokens_per_second": 121520.69857023798,
+      "peak_allocated_gib": 60.84172344207764,
+      "peak_reserved_gib": 62.451171875
+    }
+  }
+}

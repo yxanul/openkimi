@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -25,7 +26,33 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Profile one warmed H100 optimizer update.")
     parser.add_argument("--config", default="configs/h100-batch64-compiled.json")
     parser.add_argument("--warmup", type=int, default=2)
+    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument(
+        "--microbatch-sequences",
+        type=int,
+        default=None,
+        help="override sequences per microstep; accumulation is derived from the global token batch",
+    )
     parser.add_argument("--compile", action="store_true", help="compile the model with torch.compile")
+    parser.add_argument(
+        "--checkpoint-attention",
+        choices=("config", "on", "off"),
+        default="config",
+        help="override outer attention checkpointing",
+    )
+    parser.add_argument(
+        "--checkpoint-ffn",
+        choices=("config", "on", "off"),
+        default="config",
+        help="override outer FFN checkpointing",
+    )
+    parser.add_argument(
+        "--attnres-checkpoint-level",
+        type=int,
+        choices=(0, 1),
+        default=None,
+        help="override FLA AttnRes checkpoint level",
+    )
     parser.add_argument(
         "--transformer-engine-experts",
         action="store_true",
@@ -39,6 +66,15 @@ def main() -> None:
     args = parser.parse_args()
 
     model_cfg, data_cfg, train_cfg = load_config(args.config)
+    if args.microbatch_sequences is not None:
+        train_cfg.microbatch_sequences = args.microbatch_sequences
+    if args.checkpoint_attention != "config":
+        model_cfg.checkpoint_attention = args.checkpoint_attention == "on"
+    if args.checkpoint_ffn != "config":
+        model_cfg.checkpoint_ffn = args.checkpoint_ffn == "on"
+    if args.attnres_checkpoint_level is not None:
+        model_cfg.attnres_checkpoint_level = args.attnres_checkpoint_level
+    model_cfg.validate()
     train_cfg.compile_model = False
     train_cfg.validate(data_cfg, world_size=1)
     if not torch.cuda.is_available():
@@ -66,14 +102,20 @@ def main() -> None:
         (train_cfg.microbatch_sequences, data_cfg.sequence_length),
         device=device,
     )
+    accumulation_steps = train_cfg.gradient_accumulation(data_cfg, 1)
 
     def optimizer_update() -> None:
-        with _nvtx_range("forward"):
-            with torch.autocast("cuda", dtype=torch.bfloat16):
-                output = model(input_ids, labels, is_first_microbatch=True)
-        assert output.loss is not None
-        with _nvtx_range("backward"):
-            output.loss.backward()
+        for microstep in range(accumulation_steps):
+            with _nvtx_range(f"forward.microstep_{microstep}"):
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    output = model(
+                        input_ids,
+                        labels,
+                        is_first_microbatch=microstep == 0,
+                    )
+            assert output.loss is not None
+            with _nvtx_range(f"backward.microstep_{microstep}"):
+                (output.loss / accumulation_steps).backward()
         with _nvtx_range("gradient_clip"):
             torch.nn.utils.clip_grad_norm_(model.parameters(), train_cfg.gradient_clip)
         with _nvtx_range("adamw"):
@@ -85,35 +127,53 @@ def main() -> None:
         optimizer_update()
         torch.cuda.synchronize()
 
-    torch.cuda.reset_peak_memory_stats()
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
+    elapsed_samples: list[float] = []
+    peak_allocated_gib = 0.0
+    peak_reserved_gib = 0.0
     if args.cuda_profiler_range:
         torch.cuda.cudart().cudaProfilerStart()
-    start.record()
-    with _nvtx_range("optimizer_update"):
-        optimizer_update()
-    end.record()
-    torch.cuda.synchronize()
+    for _ in range(args.repeats):
+        torch.cuda.reset_peak_memory_stats()
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        with _nvtx_range("optimizer_update"):
+            optimizer_update()
+        end.record()
+        torch.cuda.synchronize()
+        elapsed_samples.append(start.elapsed_time(end))
+        peak_allocated_gib = max(
+            peak_allocated_gib,
+            torch.cuda.max_memory_allocated() / 2**30,
+        )
+        peak_reserved_gib = max(
+            peak_reserved_gib,
+            torch.cuda.max_memory_reserved() / 2**30,
+        )
     if args.cuda_profiler_range:
         torch.cuda.cudart().cudaProfilerStop()
 
-    elapsed_ms = start.elapsed_time(end)
-    tokens = train_cfg.microbatch_sequences * data_cfg.sequence_length
+    elapsed_ms = statistics.median(elapsed_samples)
+    tokens = train_cfg.global_batch_tokens
     print(
         json.dumps(
             {
                 "device": torch.cuda.get_device_name(),
                 "torch_compile": args.compile,
                 "transformer_engine_experts": args.transformer_engine_experts,
+                "checkpoint_attention": model_cfg.checkpoint_attention_enabled,
+                "checkpoint_ffn": model_cfg.checkpoint_ffn_enabled,
+                "attnres_checkpoint_level": model_cfg.attnres_checkpoint_level,
                 "microbatch_sequences": train_cfg.microbatch_sequences,
                 "sequence_length": data_cfg.sequence_length,
-                "gradient_accumulation_steps": train_cfg.gradient_accumulation(data_cfg, 1),
+                "gradient_accumulation_steps": accumulation_steps,
+                "microbatch_tokens": train_cfg.microbatch_sequences * data_cfg.sequence_length,
                 "tokens": tokens,
                 "elapsed_ms": elapsed_ms,
+                "elapsed_samples_ms": elapsed_samples,
                 "tokens_per_second": tokens / (elapsed_ms / 1000),
-                "peak_allocated_gib": torch.cuda.max_memory_allocated() / 2**30,
-                "peak_reserved_gib": torch.cuda.max_memory_reserved() / 2**30,
+                "peak_allocated_gib": peak_allocated_gib,
+                "peak_reserved_gib": peak_reserved_gib,
                 "backend": raw_model.backend.as_dict(),
             },
             indent=2,

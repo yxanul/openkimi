@@ -64,6 +64,9 @@ class ModelConfig:
     loss_backend: LossBackend = LossBackend.AUTO
     linear_precision: LinearPrecision = LinearPrecision.BF16
     activation_checkpointing: bool = True
+    checkpoint_attention: bool | None = None
+    checkpoint_ffn: bool | None = None
+    attnres_checkpoint_level: int = 1
 
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
@@ -81,6 +84,18 @@ class ModelConfig:
             return ((self.vocab_size + 15) // 16) * 16
         return self.vocab_size
 
+    @property
+    def checkpoint_attention_enabled(self) -> bool:
+        if self.checkpoint_attention is None:
+            return self.activation_checkpointing
+        return self.checkpoint_attention
+
+    @property
+    def checkpoint_ffn_enabled(self) -> bool:
+        if self.checkpoint_ffn is None:
+            return self.activation_checkpointing
+        return self.checkpoint_ffn
+
     def validate(self) -> None:
         if self.n_heads * self.kda_head_dim != self.d_model:
             raise ValueError("n_heads * kda_head_dim must equal d_model")
@@ -94,6 +109,8 @@ class ModelConfig:
             raise ValueError("latent_dim must be in (0, d_model]")
         if self.attnres_block_size < 1:
             raise ValueError("attnres_block_size must be positive")
+        if self.attnres_checkpoint_level not in (0, 1):
+            raise ValueError("attnres_checkpoint_level must be 0 or 1")
         if self.n_routed_experts % self.router_num_groups:
             raise ValueError("n_routed_experts must be divisible by router_num_groups")
         if not 1 <= self.router_topk_groups <= self.router_num_groups:

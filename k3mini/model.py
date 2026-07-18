@@ -571,12 +571,19 @@ class LatentMoE(nn.Module):
 
 
 class BlockAttnResRead(nn.Module):
-    def __init__(self, d_model: int, eps: float, backend: BackendStatus) -> None:
+    def __init__(
+        self,
+        d_model: int,
+        eps: float,
+        backend: BackendStatus,
+        checkpoint_level: int = 1,
+    ) -> None:
         super().__init__()
         self.backend = backend
         self.pseudo_query = nn.Parameter(torch.zeros(d_model))
         self.key_weight = nn.Parameter(torch.ones(d_model))
         self.eps = eps
+        self.checkpoint_level = checkpoint_level
 
     def forward(
         self,
@@ -597,7 +604,7 @@ class BlockAttnResRead(nn.Module):
                 output_rms_weight=output_norm_weight,
                 rms_eps=self.eps,
                 return_weights=return_weights,
-                checkpoint_level=1,
+                checkpoint_level=self.checkpoint_level,
             )
             if return_weights:
                 hidden, weights = result
@@ -639,8 +646,18 @@ class K3MiniBlock(nn.Module):
         use_global = cfg.global_attn_every > 0 and (layer_idx + 1) % cfg.global_attn_every == 0
         self.mixer_kind = "nope_mla" if use_global else "kda"
         self.mixer = NoPELatentAttention(cfg) if use_global else KimiDeltaAttention(cfg, backend)
-        self.attn_read = BlockAttnResRead(cfg.d_model, cfg.rms_norm_eps, backend)
-        self.ffn_read = BlockAttnResRead(cfg.d_model, cfg.rms_norm_eps, backend)
+        self.attn_read = BlockAttnResRead(
+            cfg.d_model,
+            cfg.rms_norm_eps,
+            backend,
+            cfg.attnres_checkpoint_level,
+        )
+        self.ffn_read = BlockAttnResRead(
+            cfg.d_model,
+            cfg.rms_norm_eps,
+            backend,
+            cfg.attnres_checkpoint_level,
+        )
         self.attn_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.ffn_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.is_dense = layer_idx == 0
@@ -663,7 +680,8 @@ class K3MiniBlock(nn.Module):
         state: BlockAttnResState,
         *,
         diagnostics: bool,
-        checkpoint_sublayers: bool,
+        checkpoint_attention: bool,
+        checkpoint_ffn: bool,
         is_first_microbatch: bool | None,
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
         attn_sources = state.sources()
@@ -676,7 +694,7 @@ class K3MiniBlock(nn.Module):
             )
             return self.mixer(hidden)
 
-        if checkpoint_sublayers:
+        if checkpoint_attention:
             attn_output = checkpoint(
                 attention_step,
                 *attn_sources,
@@ -694,7 +712,7 @@ class K3MiniBlock(nn.Module):
         state.add(attn_output)
 
         ffn_sources = state.sources()
-        can_checkpoint_ffn = checkpoint_sublayers and (
+        can_checkpoint_ffn = checkpoint_ffn and (
             self.is_dense
             or (isinstance(self.ffn, LatentMoE) and isinstance(self.ffn.router, SoftmaxTopKRouter))
         )
@@ -798,7 +816,12 @@ class K3MiniForCausalLM(nn.Module):
         self.layers = nn.ModuleList(
             [K3MiniBlock(cfg, layer_idx, self.backend) for layer_idx in range(cfg.n_layers)]
         )
-        self.final_read = BlockAttnResRead(cfg.d_model, cfg.rms_norm_eps, self.backend)
+        self.final_read = BlockAttnResRead(
+            cfg.d_model,
+            cfg.rms_norm_eps,
+            self.backend,
+            cfg.attnres_checkpoint_level,
+        )
         self.final_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.lm_head = nn.Linear(cfg.d_model, cfg.physical_vocab_size, bias=False)
         if cfg.linear_precision is LinearPrecision.FP8_CURRENT:
@@ -914,17 +937,19 @@ class K3MiniForCausalLM(nn.Module):
         aux_losses: list[torch.Tensor] = []
         z_losses: list[torch.Tensor] = []
         layer_diagnostics: list[dict[str, Any]] = []
-        use_checkpoint = (
-            self.cfg.activation_checkpointing
-            and self.training
+        can_checkpoint = (
+            self.training
             and torch.is_grad_enabled()
             and not return_diagnostics
         )
+        checkpoint_attention = can_checkpoint and self.cfg.checkpoint_attention_enabled
+        checkpoint_ffn = can_checkpoint and self.cfg.checkpoint_ffn_enabled
         for layer in self.layers:
             aux, z_loss, layer_stats = layer(
                 state,
                 diagnostics=return_diagnostics,
-                checkpoint_sublayers=use_checkpoint,
+                checkpoint_attention=checkpoint_attention,
+                checkpoint_ffn=checkpoint_ffn,
                 is_first_microbatch=is_first_microbatch,
             )
             aux_losses.append(aux)

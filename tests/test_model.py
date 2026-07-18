@@ -108,6 +108,23 @@ def test_fp8_current_configuration_pads_only_the_physical_vocabulary() -> None:
         reference_cfg.validate()
 
 
+def test_checkpoint_policy_defaults_and_overrides() -> None:
+    cfg = ModelConfig(activation_checkpointing=True)
+    assert cfg.checkpoint_attention_enabled
+    assert cfg.checkpoint_ffn_enabled
+
+    cfg.checkpoint_attention = False
+    assert not cfg.checkpoint_attention_enabled
+    assert cfg.checkpoint_ffn_enabled
+
+    cfg.checkpoint_ffn = False
+    assert not cfg.checkpoint_ffn_enabled
+
+    cfg.attnres_checkpoint_level = 2
+    with pytest.raises(ValueError, match="must be 0 or 1"):
+        cfg.validate()
+
+
 def test_full_optimizer_step_and_no_weight_decay_groups(tiny_model_config, tiny_train_config) -> None:
     model = K3MiniForCausalLM(tiny_model_config)
     optimizer = build_optimizer(model, tiny_train_config)
