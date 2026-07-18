@@ -13,9 +13,10 @@ optimizer-step parity pass.
    AttnRes forwards cost approximately
    `86.447 ms * 32 / 65 = 42.6 ms`, or 1.9% of the update, before counting the
    replayed KDA/MLA, FFN, router, expert, and FP8 quantization work.
-2. [ ] **Tune the FP8 LM-head token chunk.** The current heuristic selects 2,048
-   rows, producing 128 LM-head forward GEMMs, CE launches, and backward GEMMs at
-   262,144 tokens. Test 4K, 8K, 16K, and 32K while the machine has memory
+2. [x] **Tune the FP8 LM-head token chunk.** With the selected microbatch-32,
+   accumulation-2 policy, the automatic heuristic selects 1,024 rows and
+   produces 256 LM-head forward GEMMs, CE launches, and backward GEMMs per
+   262,144-token update. Test 2K, 4K, 8K, 16K, and 32K while the machine has memory
    headroom. This can improve the entire LM-head region, not just the CE
    reduction.
 3. [ ] **Replace Liger CE with QuACK only after chunk tuning.** Compare both at
@@ -57,7 +58,7 @@ Run in this order if GPU time is limited:
 
 1. [x] Environment inventory and current-baseline reproduction.
 2. [x] Outer-checkpoint and AttnRes checkpoint-level matrix.
-3. [ ] FP8 LM-head chunk-size sweep using the current Liger CE.
+3. [x] FP8 LM-head chunk-size sweep using the current Liger CE.
 4. [ ] QuACK cross-entropy parity and timing at the tuned chunk size.
 5. [ ] SonicMoE routed-expert parity and timing.
 6. [ ] Combined winning checkpoint, LM-head, CE, and MoE settings.
@@ -251,9 +252,29 @@ This is the second optimization experiment and must precede the QuACK comparison
 The current chunk is derived from the Liger fused-linear memory heuristic rather
 than tuned for H100 Transformer Engine Current Scaling.
 
+### Result — 2026-07-18
+
+- [x] The automatic control resolved to 1,024 rows and 256 chunks/update:
+  121,634 tok/s at 60.84 GiB allocated.
+- [x] Throughput rose monotonically through 2K, 4K, 8K, and 16K. The 16K winner
+  reached 127,858 tok/s at 68.21 GiB allocated and 71.14 GiB reserved, a 5.12%
+  improvement with 8.04 GiB of reserved-memory headroom.
+- [x] The 32K candidate OOMed in the FP8 LM-head backward after reaching
+  72.09 GiB allocated and requesting another 3.91 GiB.
+- [x] At the actual `D=768`, logical-vocabulary 128,001, physical-vocabulary
+  128,016 shape, every non-OOM chunk matched the BF16 reference with about
+  2.67% hidden-gradient and 2.65% tied-weight-gradient relative error. All 15
+  physical dummy rows had exactly zero gradient.
+- [x] Ten consecutive 16K updates were stable at 127,747 tok/s. Nsight recorded
+  16 Liger CE launches and 201.52 ms of CE kernels, down from 256 launches and
+  about 216.22 ms for the checkpoint-only profile.
+- [x] The tuned config is
+  `configs/h100-fp8-current-lm-head-optimized.json`; complete results are in
+  `profiles/h100-sm90-fp8-lm-head-chunk-2026-07-18.json`.
+
 ### Chunk sweep
 
-- [ ] Make `loss_chunk_size` an explicit configuration/benchmark override while
+- [x] Make `fp8_lm_head_chunk_size` an explicit configuration/benchmark override while
   preserving the current automatic mode.
 - [ ] Add an NVTX range for the full LM-head loss region and optional per-chunk
   ranges covering:
@@ -262,7 +283,7 @@ than tuned for H100 Transformer Engine Current Scaling.
   - In-place CE.
   - FP8/BF16 gradient quantization.
   - LM-head input-gradient and tied-weight-gradient GEMMs.
-- [ ] At 262,144 tokens, sweep:
+- [x] At 262,144 tokens, sweep:
 
   | Chunk rows | Chunks / CE launches | Approx. BF16 logits per chunk |
   |---:|---:|---:|
@@ -272,9 +293,9 @@ than tuned for H100 Transformer Engine Current Scaling.
   | 16,384 | 16 | 3.91 GiB |
   | 32,768 | 8 | 7.81 GiB |
 
-- [ ] Stop increasing the chunk when peak memory loses the operational margin,
+- [x] Stop increasing the chunk when peak memory loses the operational margin,
   GEMM/CE latency regresses, or allocator behavior becomes unstable.
-- [ ] For every chunk, compare loss, hidden gradient, and tied embedding/LM-head
+- [x] For every chunk, compare loss, hidden gradient, and tied embedding/LM-head
   gradient against the 2,048-row baseline. Confirm all 15 physical dummy
   vocabulary rows still have exactly zero gradient.
 - [ ] Record:
@@ -286,14 +307,14 @@ than tuned for H100 Transformer Engine Current Scaling.
 - [ ] Use Nsight Compute on the best two sizes to inspect tensor-core utilization,
   TMA behavior, occupancy, DRAM traffic, and whether the larger GEMM tiles are
   actually more efficient.
-- [ ] Do not credit reduced Python/operator dispatch unless it changes measured
+- [x] Do not credit reduced Python/operator dispatch unless it changes measured
   wall time; the current profile is already about 99.1% GPU busy.
 
 ### Chunk decision gate
 
-- [ ] Use the fastest parity-clean chunk with 5-8 GiB memory margin as the new
+- [x] Use the fastest parity-clean chunk with 5-8 GiB memory margin as the new
   Liger baseline.
-- [ ] Require at least 1% full-step improvement to change the default. Otherwise
+- [x] Require at least 1% full-step improvement to change the default. Otherwise
   retain automatic 2,048-row chunking and record the sweep.
 - [ ] Compare QuACK against the tuned Liger baseline at the same chunk first.
   Then allow a small QuACK-specific chunk sweep so each backend also gets its

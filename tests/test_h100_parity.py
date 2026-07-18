@@ -187,7 +187,8 @@ def test_liger_fused_linear_cross_entropy_gradient_parity() -> None:
     assert _relative_error(weight_liger.grad, weight_fla.grad) < 5e-3
 
 
-def test_current_scaling_fp8_loss_padding_and_gradient_parity() -> None:
+@pytest.mark.parametrize("chunk_size", [16, 32, 64])
+def test_current_scaling_fp8_loss_padding_and_gradient_parity(chunk_size: int) -> None:
     from k3mini.fp8 import CurrentScalingFusedLinearCrossEntropyLoss
 
     torch.manual_seed(654)
@@ -213,7 +214,10 @@ def test_current_scaling_fp8_loss_padding_and_gradient_parity() -> None:
     with torch.autocast("cuda", dtype=torch.bfloat16):
         reference_logits = F.linear(hidden_reference, weight_reference)[:, :logical_vocab]
         reference_loss = F.cross_entropy(reference_logits, labels)
-        fp8_loss = CurrentScalingFusedLinearCrossEntropyLoss(logical_vocab)(
+        fp8_loss = CurrentScalingFusedLinearCrossEntropyLoss(
+            logical_vocab,
+            chunk_size=chunk_size,
+        )(
             weight_fp8,
             hidden_fp8,
             labels,
@@ -227,6 +231,74 @@ def test_current_scaling_fp8_loss_padding_and_gradient_parity() -> None:
         weight_reference.grad[:logical_vocab],
     ) < 0.2
     assert torch.count_nonzero(weight_fp8.grad[logical_vocab:]) == 0
+
+
+def test_current_scaling_fp8_chunk_parity_at_model_shape() -> None:
+    from k3mini.fp8 import CurrentScalingFusedLinearCrossEntropyLoss
+
+    torch.manual_seed(20260718)
+    logical_vocab = 128_001
+    physical_vocab = 128_016
+    token_count = 16_384
+    hidden_dim = 768
+    base_hidden = torch.randn(
+        token_count,
+        hidden_dim,
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    base_weight = torch.randn(
+        physical_vocab,
+        hidden_dim,
+        device="cuda",
+        dtype=torch.float32,
+    ) * 0.02
+    labels = torch.randint(logical_vocab, (token_count,), device="cuda")
+
+    def run_fp8(chunk_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden = base_hidden.detach().clone().requires_grad_(True)
+        weight = base_weight.detach().clone().requires_grad_(True)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            loss = CurrentScalingFusedLinearCrossEntropyLoss(
+                logical_vocab,
+                chunk_size=chunk_size,
+            )(weight, hidden, labels)
+        loss.backward()
+        return loss.detach(), hidden.grad.detach(), weight.grad.detach()
+
+    loss_2k, hidden_grad_2k, weight_grad_2k = run_fp8(2_048)
+    loss_16k, hidden_grad_16k, weight_grad_16k = run_fp8(16_384)
+
+    hidden_reference = base_hidden.detach().clone().requires_grad_(True)
+    weight_reference = base_weight.detach().clone().requires_grad_(True)
+    loss_reference = torch.zeros((), device="cuda")
+    for start in range(0, token_count, 2_048):
+        end = start + 2_048
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            logits = F.linear(
+                hidden_reference[start:end],
+                weight_reference,
+            )[:, :logical_vocab]
+            chunk_loss = (
+                F.cross_entropy(logits, labels[start:end], reduction="sum") / token_count
+            )
+        chunk_loss.backward()
+        loss_reference += chunk_loss.detach()
+
+    torch.testing.assert_close(loss_2k, loss_reference, atol=2e-3, rtol=2e-3)
+    torch.testing.assert_close(loss_16k, loss_reference, atol=2e-3, rtol=2e-3)
+    assert _relative_error(hidden_grad_2k, hidden_reference.grad) < 0.04
+    assert _relative_error(hidden_grad_16k, hidden_reference.grad) < 0.04
+    assert _relative_error(
+        weight_grad_2k[:logical_vocab],
+        weight_reference.grad[:logical_vocab],
+    ) < 0.04
+    assert _relative_error(
+        weight_grad_16k[:logical_vocab],
+        weight_reference.grad[:logical_vocab],
+    ) < 0.04
+    assert torch.count_nonzero(weight_grad_2k[logical_vocab:]) == 0
+    assert torch.count_nonzero(weight_grad_16k[logical_vocab:]) == 0
 
 
 def test_full_model_selects_current_scaling_without_amax_history() -> None:

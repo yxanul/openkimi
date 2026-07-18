@@ -830,7 +830,10 @@ class K3MiniForCausalLM(nn.Module):
                 current_scaling_recipe,
             )
 
-            self.loss_fn = CurrentScalingFusedLinearCrossEntropyLoss(cfg.vocab_size)
+            self.loss_fn = CurrentScalingFusedLinearCrossEntropyLoss(
+                cfg.vocab_size,
+                chunk_size=cfg.fp8_lm_head_chunk_size,
+            )
             self.fp8_recipe: Any | None = current_scaling_recipe()
         elif self.backend.loss_backend is LossBackend.LIGER:
             from liger_kernel.transformers import LigerFusedLinearCrossEntropyLoss

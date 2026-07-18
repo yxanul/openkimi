@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
@@ -99,11 +100,30 @@ def _current_scaling_quantizers(device: torch.device) -> tuple[Any, Any, Any]:
     return input_quantizer, weight_quantizer, grad_output_quantizer
 
 
+def resolve_fp8_lm_head_chunk_size(
+    token_count: int,
+    physical_vocab_size: int,
+    hidden_dim: int,
+    requested_chunk_size: int | None,
+) -> int:
+    """Resolve the configured chunk or reproduce the original Liger-style heuristic."""
+    if token_count < 1:
+        raise ValueError("token_count must be positive")
+    if requested_chunk_size is not None:
+        if requested_chunk_size < 16 or requested_chunk_size % 16:
+            raise ValueError("requested_chunk_size must be a positive multiple of 16")
+        return min(requested_chunk_size, token_count)
+    increase_factor = math.ceil(physical_vocab_size / hidden_dim)
+    target = math.ceil(token_count / increase_factor)
+    return max(16, 1 << (target - 1).bit_length())
+
+
 def _fp8_linear_cross_entropy_forward(
     hidden: torch.Tensor,
     weight: torch.Tensor,
     labels: torch.Tensor,
     logical_vocab_size: int,
+    requested_chunk_size: int | None,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
     import triton
     from liger_kernel.ops.cross_entropy import liger_cross_entropy_kernel
@@ -145,9 +165,12 @@ def _fp8_linear_cross_entropy_forward(
     )
     loss_per_token = torch.zeros(token_count, dtype=torch.float32, device=hidden.device)
 
-    increase_factor = triton.cdiv(physical_vocab_size, hidden_dim)
-    chunk_size = triton.next_power_of_2(triton.cdiv(token_count, increase_factor))
-    chunk_size = max(16, int(chunk_size))
+    chunk_size = resolve_fp8_lm_head_chunk_size(
+        token_count,
+        physical_vocab_size,
+        hidden_dim,
+        requested_chunk_size,
+    )
     num_chunks = triton.cdiv(token_count, chunk_size)
     block_size = min(MAX_FUSED_SIZE, triton.next_power_of_2(logical_vocab_size))
 
@@ -248,12 +271,14 @@ class _CurrentScalingFusedLinearCrossEntropy(torch.autograd.Function):
         weight: torch.Tensor,
         labels: torch.Tensor,
         logical_vocab_size: int,
+        requested_chunk_size: int | None,
     ) -> torch.Tensor:
         loss, grad_hidden, grad_weight = _fp8_linear_cross_entropy_forward(
             hidden,
             weight,
             labels,
             logical_vocab_size,
+            requested_chunk_size,
         )
         if grad_hidden is not None and grad_weight is not None:
             ctx.save_for_backward(grad_hidden.detach(), grad_weight.detach())
@@ -274,15 +299,20 @@ class _CurrentScalingFusedLinearCrossEntropy(torch.autograd.Function):
             grad_weight,
             None,
         )
-        return grad_hidden, grad_weight, None, None
+        return grad_hidden, grad_weight, None, None, None
 
 
 class CurrentScalingFusedLinearCrossEntropyLoss(nn.Module):
     """Chunked TE FP8 LM head plus exact logical-vocabulary Liger CE."""
 
-    def __init__(self, logical_vocab_size: int) -> None:
+    def __init__(
+        self,
+        logical_vocab_size: int,
+        chunk_size: int | None = None,
+    ) -> None:
         super().__init__()
         self.logical_vocab_size = logical_vocab_size
+        self.chunk_size = chunk_size
 
     def forward(
         self,
@@ -298,4 +328,5 @@ class CurrentScalingFusedLinearCrossEntropyLoss(nn.Module):
             weight,
             labels,
             self.logical_vocab_size,
+            self.chunk_size,
         )

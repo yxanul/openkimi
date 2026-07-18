@@ -67,6 +67,7 @@ class ModelConfig:
     checkpoint_attention: bool | None = None
     checkpoint_ffn: bool | None = None
     attnres_checkpoint_level: int = 1
+    fp8_lm_head_chunk_size: int | None = None
 
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
@@ -111,6 +112,16 @@ class ModelConfig:
             raise ValueError("attnres_block_size must be positive")
         if self.attnres_checkpoint_level not in (0, 1):
             raise ValueError("attnres_checkpoint_level must be 0 or 1")
+        if self.fp8_lm_head_chunk_size is not None:
+            if self.linear_precision is not LinearPrecision.FP8_CURRENT:
+                raise ValueError(
+                    "fp8_lm_head_chunk_size requires linear_precision=fp8_current"
+                )
+            if (
+                self.fp8_lm_head_chunk_size < 16
+                or self.fp8_lm_head_chunk_size % 16
+            ):
+                raise ValueError("fp8_lm_head_chunk_size must be a positive multiple of 16")
         if self.n_routed_experts % self.router_num_groups:
             raise ValueError("n_routed_experts must be divisible by router_num_groups")
         if not 1 <= self.router_topk_groups <= self.router_num_groups:

@@ -1,0 +1,220 @@
+{
+  "date": "2026-07-18",
+  "hardware": {
+    "host": "gpu-ubuntu-12cpu-240gb-fi-hel2",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "usable_gpu_memory_gib": 79.18,
+    "driver": "595.58.03",
+    "system_cuda": "13.2",
+    "build_cuda": "12.6.85",
+    "torch": "2.7.0+cu126",
+    "transformer_engine": "2.16.0",
+    "fla": "0.5.2",
+    "nsight_systems": "2025.6.3"
+  },
+  "conditions": {
+    "openkimi_parent_commit": "39a2dc0",
+    "sequence_length": 4096,
+    "global_batch_tokens": 262144,
+    "microbatch_sequences": 32,
+    "gradient_accumulation_steps": 2,
+    "checkpoint_attention": true,
+    "checkpoint_ffn": false,
+    "attnres_checkpoint_level": 1,
+    "precision": "BF16 attention and routed experts with TE FP8 Current Scaling linears",
+    "loss_backend": "Liger CE after a TE FP8 Current Scaling LM-head projection",
+    "torch_compile": false,
+    "synthetic_static_cuda_inputs": true,
+    "warmup_updates_per_candidate": 2,
+    "measured_updates_per_candidate": 5
+  },
+  "automatic_control": {
+    "configured_chunk_rows": null,
+    "effective_chunk_rows": 1024,
+    "chunks_per_microstep": 128,
+    "chunks_per_update": 256,
+    "elapsed_samples_ms": [
+      2154.898681640625,
+      2155.142822265625,
+      2155.4189453125,
+      2155.193603515625,
+      2155.25341796875
+    ],
+    "median_elapsed_ms": 2155.193603515625,
+    "tokens_per_second": 121633.62009444617,
+    "peak_allocated_gib": 60.83998775482178,
+    "peak_reserved_gib": 62.451171875
+  },
+  "sweep": [
+    {
+      "chunk_rows": 2048,
+      "chunks_per_update": 128,
+      "elapsed_samples_ms": [
+        2092.249755859375,
+        2092.3310546875,
+        2092.608642578125,
+        2092.385986328125,
+        2092.3369140625
+      ],
+      "median_elapsed_ms": 2092.3369140625,
+      "tokens_per_second": 125287.6619621545,
+      "throughput_change_vs_automatic_percent": 3.004138053994465,
+      "peak_allocated_gib": 61.3376989364624,
+      "peak_reserved_gib": 62.330078125
+    },
+    {
+      "chunk_rows": 4096,
+      "chunks_per_update": 64,
+      "elapsed_samples_ms": [
+        2067.20458984375,
+        2067.645751953125,
+        2067.356689453125,
+        2067.78955078125,
+        2067.55322265625
+      ],
+      "median_elapsed_ms": 2067.55322265625,
+      "tokens_per_second": 126789.48098042933,
+      "throughput_change_vs_automatic_percent": 4.238845215639997,
+      "peak_allocated_gib": 62.322691917419434,
+      "peak_reserved_gib": 63.83984375
+    },
+    {
+      "chunk_rows": 8192,
+      "chunks_per_update": 32,
+      "elapsed_samples_ms": [
+        2059.576904296875,
+        2059.3828125,
+        2059.964599609375,
+        2060.972900390625,
+        2060.445556640625
+      ],
+      "median_elapsed_ms": 2059.964599609375,
+      "tokens_per_second": 127256.55579212846,
+      "throughput_change_vs_automatic_percent": 4.622846621942345,
+      "peak_allocated_gib": 64.2917013168335,
+      "peak_reserved_gib": 66.798828125
+    },
+    {
+      "chunk_rows": 16384,
+      "chunks_per_update": 16,
+      "elapsed_samples_ms": [
+        2050.06494140625,
+        2050.35400390625,
+        2050.272705078125,
+        2049.82861328125,
+        2050.461669921875
+      ],
+      "median_elapsed_ms": 2050.272705078125,
+      "tokens_per_second": 127858.1133869268,
+      "throughput_change_vs_automatic_percent": 5.117411853439391,
+      "peak_allocated_gib": 68.20579433441162,
+      "peak_reserved_gib": 71.13671875,
+      "reserved_memory_headroom_gib": 8.04328125
+    },
+    {
+      "chunk_rows": 32768,
+      "chunks_per_update": 8,
+      "result": "OOM during Transformer Engine FP8 LM-head backward",
+      "allocated_gib_before_failure": 72.09,
+      "reserved_unallocated_gib_before_failure": 0.994,
+      "failed_allocation_gib": 3.91
+    }
+  ],
+  "model_shape_parity": {
+    "token_count": 16384,
+    "hidden_dim": 768,
+    "logical_vocab_size": 128001,
+    "physical_vocab_size": 128016,
+    "loss_bf16": 11.917613983154297,
+    "chunks": {
+      "2048": {
+        "loss": 11.917579650878906,
+        "loss_absolute_error_vs_bf16": 0.000034332275390625,
+        "hidden_gradient_relative_error_vs_bf16": 0.026674609631299973,
+        "weight_gradient_relative_error_vs_bf16": 0.026496369391679764,
+        "dummy_gradient_nonzero": 0
+      },
+      "4096": {
+        "loss": 11.917634963989258,
+        "loss_absolute_error_vs_bf16": 0.0000209808349609375,
+        "hidden_gradient_relative_error_vs_bf16": 0.02667434886097908,
+        "weight_gradient_relative_error_vs_bf16": 0.02651328407227993,
+        "dummy_gradient_nonzero": 0
+      },
+      "8192": {
+        "loss": 11.917621612548828,
+        "loss_absolute_error_vs_bf16": 0.00000762939453125,
+        "hidden_gradient_relative_error_vs_bf16": 0.026674220338463783,
+        "weight_gradient_relative_error_vs_bf16": 0.026529574766755104,
+        "dummy_gradient_nonzero": 0
+      },
+      "16384": {
+        "loss": 11.917728424072266,
+        "loss_absolute_error_vs_bf16": 0.00011444091796875,
+        "hidden_gradient_relative_error_vs_bf16": 0.02667451836168766,
+        "weight_gradient_relative_error_vs_bf16": 0.02655233070254326,
+        "dummy_gradient_nonzero": 0
+      }
+    }
+  },
+  "winner_stability": {
+    "chunk_rows": 16384,
+    "elapsed_samples_ms": [
+      2051.73974609375,
+      2051.9638671875,
+      2051.5087890625,
+      2052.159423828125,
+      2052.630859375,
+      2052.6513671875,
+      2051.4208984375,
+      2052.794189453125,
+      2051.492919921875,
+      2052.83544921875
+    ],
+    "median_elapsed_ms": 2052.0616455078125,
+    "tokens_per_second": 127746.64960668306,
+    "peak_allocated_gib": 68.21702480316162,
+    "peak_reserved_gib": 71.13671875,
+    "result": "Ten consecutive measured AdamW updates completed with stable latency and finite state."
+  },
+  "saved_config_reproduction": {
+    "elapsed_samples_ms": [
+      2049.441162109375,
+      2050.5205078125,
+      2049.7138671875,
+      2050.9443359375,
+      2050.92626953125
+    ],
+    "median_elapsed_ms": 2050.5205078125,
+    "tokens_per_second": 127842.66190034637,
+    "peak_allocated_gib": 68.21694850921631,
+    "peak_reserved_gib": 69.18359375
+  },
+  "nsight_winner": {
+    "trace_file_on_test_host": "profiles/h100-lm-head-chunk16k-2026-07-18.nsys-rep",
+    "profiled_elapsed_ms": 2058.7021484375,
+    "profiled_tokens_per_second": 127334.59291280204,
+    "gpu_kernel_time_ms": 2037.923693,
+    "liger_ce_launches": 16,
+    "liger_ce_kernel_time_ms": 201.518012,
+    "liger_ce_kernel_share_percent": 9.9,
+    "comparison_checkpoint_profile_ce_launches": 256,
+    "comparison_checkpoint_profile_ce_kernel_time_ms": 216.223,
+    "note": "The remaining gain comes from fewer and larger FP8 forward/backward GEMMs, quantization calls, and per-chunk dispatch in addition to the smaller CE total."
+  },
+  "decision": {
+    "adopt_chunk_rows": 16384,
+    "expected_tokens_per_second": 127746.64960668306,
+    "improvement_vs_automatic_control_percent": 5.117411853439391,
+    "improvement_vs_checkpoint_only_stable_run_percent": 5.077354301072523,
+    "combined_improvement_vs_pre_checkpoint_repeated_baseline_percent": 10.035952963097872,
+    "config": "configs/h100-fp8-current-lm-head-optimized.json",
+    "next_experiment": "Compare QuACK against Liger using the same 16,384-row chunk first."
+  },
+  "verification": {
+    "macos_tests": "18 passed, 13 skipped",
+    "macos_ruff": "passed",
+    "h100_gpu_tests": "10 passed",
+    "result": "Configuration-only reproduction selected 16,384 rows and completed five measured updates."
+  }
+}

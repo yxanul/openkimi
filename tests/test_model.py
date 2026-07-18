@@ -7,6 +7,7 @@ import torch
 
 from k3mini.backends import resolve_backend
 from k3mini.config import KernelBackend, LinearPrecision, ModelConfig, load_config
+from k3mini.fp8 import resolve_fp8_lm_head_chunk_size
 from k3mini.model import (
     BlockAttnResRead,
     K3MiniForCausalLM,
@@ -106,6 +107,13 @@ def test_fp8_current_configuration_pads_only_the_physical_vocabulary() -> None:
     )
     with pytest.raises(ValueError, match="requires the H100"):
         reference_cfg.validate()
+
+    assert resolve_fp8_lm_head_chunk_size(131_072, 128_016, 768, None) == 1_024
+    assert resolve_fp8_lm_head_chunk_size(131_072, 128_016, 768, 8_192) == 8_192
+
+    cfg.fp8_lm_head_chunk_size = 2_047
+    with pytest.raises(ValueError, match="positive multiple of 16"):
+        cfg.validate()
 
 
 def test_checkpoint_policy_defaults_and_overrides() -> None:

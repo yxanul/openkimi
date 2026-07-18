@@ -54,6 +54,12 @@ def main() -> None:
         help="override FLA AttnRes checkpoint level",
     )
     parser.add_argument(
+        "--fp8-lm-head-chunk-size",
+        type=int,
+        default=None,
+        help="override FP8 LM-head rows per chunk; omit to use the config/automatic heuristic",
+    )
+    parser.add_argument(
         "--transformer-engine-experts",
         action="store_true",
         help="replace MegaBlocks routed experts with experimental TE 2.16 GroupedLinear",
@@ -74,6 +80,8 @@ def main() -> None:
         model_cfg.checkpoint_ffn = args.checkpoint_ffn == "on"
     if args.attnres_checkpoint_level is not None:
         model_cfg.attnres_checkpoint_level = args.attnres_checkpoint_level
+    if args.fp8_lm_head_chunk_size is not None:
+        model_cfg.fp8_lm_head_chunk_size = args.fp8_lm_head_chunk_size
     model_cfg.validate()
     train_cfg.compile_model = False
     train_cfg.validate(data_cfg, world_size=1)
@@ -103,6 +111,23 @@ def main() -> None:
         device=device,
     )
     accumulation_steps = train_cfg.gradient_accumulation(data_cfg, 1)
+    effective_lm_head_chunk_size: int | None = None
+    lm_head_chunks_per_microstep: int | None = None
+    lm_head_chunks_per_update: int | None = None
+    if model_cfg.linear_precision.value == "fp8_current":
+        from k3mini.fp8 import resolve_fp8_lm_head_chunk_size
+
+        microbatch_tokens = train_cfg.microbatch_sequences * data_cfg.sequence_length
+        effective_lm_head_chunk_size = resolve_fp8_lm_head_chunk_size(
+            microbatch_tokens,
+            model_cfg.physical_vocab_size,
+            model_cfg.d_model,
+            model_cfg.fp8_lm_head_chunk_size,
+        )
+        lm_head_chunks_per_microstep = (
+            microbatch_tokens + effective_lm_head_chunk_size - 1
+        ) // effective_lm_head_chunk_size
+        lm_head_chunks_per_update = lm_head_chunks_per_microstep * accumulation_steps
 
     def optimizer_update() -> None:
         for microstep in range(accumulation_steps):
@@ -164,6 +189,10 @@ def main() -> None:
                 "checkpoint_attention": model_cfg.checkpoint_attention_enabled,
                 "checkpoint_ffn": model_cfg.checkpoint_ffn_enabled,
                 "attnres_checkpoint_level": model_cfg.attnres_checkpoint_level,
+                "configured_fp8_lm_head_chunk_size": model_cfg.fp8_lm_head_chunk_size,
+                "effective_fp8_lm_head_chunk_size": effective_lm_head_chunk_size,
+                "lm_head_chunks_per_microstep": lm_head_chunks_per_microstep,
+                "lm_head_chunks_per_update": lm_head_chunks_per_update,
                 "microbatch_sequences": train_cfg.microbatch_sequences,
                 "sequence_length": data_cfg.sequence_length,
                 "gradient_accumulation_steps": accumulation_steps,
