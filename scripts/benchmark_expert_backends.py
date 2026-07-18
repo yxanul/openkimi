@@ -4,13 +4,14 @@ import argparse
 import json
 import os
 import statistics
+import time
 import types
 
 import torch
 import torch.nn as nn
 
 from k3mini.backends import resolve_backend
-from k3mini.config import KernelBackend, ModelConfig
+from k3mini.config import KernelBackend, ModelConfig, RoutedExpertBackend
 from k3mini.model import StackedRoutedExperts
 
 
@@ -106,12 +107,18 @@ def _measure(
     *,
     warmup: int,
     repeats: int,
-) -> dict[str, float | str]:
+) -> dict[str, float | list[float] | str]:
     times: list[float] = []
-    for iteration in range(warmup + repeats):
+    cold_start_seconds = 0.0
+    for iteration in range(1 + warmup + repeats):
+        if iteration == 1 + warmup:
+            # Exclude one-time compiler/autotuner workspaces from the steady-state
+            # peak while retaining persistent parameters in the allocator baseline.
+            torch.cuda.reset_peak_memory_stats()
         module.zero_grad(set_to_none=True)
         latent.grad = None
         weights.grad = None
+        wall_start = time.perf_counter()
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
         start.record()
@@ -121,10 +128,14 @@ def _measure(
         loss.backward()
         end.record()
         torch.cuda.synchronize()
-        if iteration >= warmup:
+        if iteration == 0:
+            cold_start_seconds = time.perf_counter() - wall_start
+        elif iteration > warmup:
             times.append(start.elapsed_time(end))
     return {
         "provider": name,
+        "cold_start_seconds": cold_start_seconds,
+        "samples_ms": times,
         "median_ms": statistics.median(times),
         "min_ms": min(times),
         "output_l2": float(output.float().norm()),
@@ -139,12 +150,27 @@ def main() -> None:
     parser.add_argument("--tokens", type=int, default=262_144)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--provider", action="append", choices=("megablocks", "transformer-engine"))
+    parser.add_argument("--latent-dim", type=int, default=192)
+    parser.add_argument("--expert-ffn-dim", type=int, default=512)
+    parser.add_argument("--experts", type=int, default=64)
+    parser.add_argument("--top-k", type=int, default=4)
+    parser.add_argument(
+        "--provider",
+        action="append",
+        choices=("megablocks", "sonic", "transformer-engine"),
+    )
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("this benchmark requires CUDA")
 
-    cfg = ModelConfig(kernel_backend=KernelBackend.H100)
+    cfg = ModelConfig(
+        latent_dim=args.latent_dim,
+        expert_ffn_dim=args.expert_ffn_dim,
+        n_routed_experts=args.experts,
+        top_k=args.top_k,
+        kernel_backend=KernelBackend.H100,
+    )
+    cfg.validate()
     torch.manual_seed(1234)
     latent = torch.randn(
         args.tokens,
@@ -167,7 +193,7 @@ def main() -> None:
     )
     with torch.no_grad():
         weights.div_(weights.sum(-1, keepdim=True))
-    providers = args.provider or ["megablocks", "transformer-engine"]
+    providers = args.provider or ["megablocks", "sonic", "transformer-engine"]
 
     print(
         json.dumps(
@@ -183,10 +209,19 @@ def main() -> None:
     )
     for provider in providers:
         torch.cuda.reset_peak_memory_stats()
-        if provider == "megablocks":
+        if provider in {"megablocks", "sonic"}:
+            expert_backend = (
+                RoutedExpertBackend.SONIC
+                if provider == "sonic"
+                else RoutedExpertBackend.MEGABLOCKS
+            )
+            cfg.routed_expert_backend = expert_backend
             module = StackedRoutedExperts(
                 cfg,
-                resolve_backend(KernelBackend.H100),
+                resolve_backend(
+                    KernelBackend.H100,
+                    routed_expert_backend=expert_backend,
+                ),
             ).cuda()
         else:
             module = TransformerEngineExperts(cfg).cuda()

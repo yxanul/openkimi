@@ -5,7 +5,12 @@ from importlib.util import find_spec
 
 import torch
 
-from .config import KernelBackend, LinearPrecision, LossBackend
+from .config import (
+    KernelBackend,
+    LinearPrecision,
+    LossBackend,
+    RoutedExpertBackend,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +20,7 @@ class BackendStatus:
     kda: str
     short_conv: str
     attnres: str
+    routed_expert_backend: RoutedExpertBackend
     expert_mlp: str
     linear_precision: LinearPrecision
     dense_ffn: str
@@ -28,6 +34,7 @@ class BackendStatus:
             "kda": self.kda,
             "short_conv": self.short_conv,
             "attnres": self.attnres,
+            "routed_expert_backend": self.routed_expert_backend.value,
             "expert_mlp": self.expert_mlp,
             "linear_precision": self.linear_precision.value,
             "dense_ffn": self.dense_ffn,
@@ -72,10 +79,34 @@ def _resolve_loss_backend(requested: LossBackend, kernel_backend: KernelBackend)
     return requested
 
 
+def _resolve_routed_expert_backend(
+    requested: RoutedExpertBackend,
+    kernel_backend: KernelBackend,
+) -> RoutedExpertBackend:
+    requested = RoutedExpertBackend(requested)
+    if kernel_backend is KernelBackend.REFERENCE:
+        if requested not in {RoutedExpertBackend.AUTO, RoutedExpertBackend.REFERENCE}:
+            raise RuntimeError(
+                f"routed_expert_backend={requested.value} requires the H100 kernel backend"
+            )
+        return RoutedExpertBackend.REFERENCE
+    if requested is RoutedExpertBackend.AUTO:
+        return RoutedExpertBackend.MEGABLOCKS
+    if requested is RoutedExpertBackend.REFERENCE:
+        raise RuntimeError("routed_expert_backend=reference requires kernel_backend=reference")
+    if requested is RoutedExpertBackend.SONIC and find_spec("sonicmoe") is None:
+        raise RuntimeError(
+            "routed_expert_backend=sonic requires the isolated SonicMoE environment; "
+            "run scripts/install_sonic_isolated.sh"
+        )
+    return requested
+
+
 def resolve_backend(
     requested: KernelBackend,
     loss_backend: LossBackend = LossBackend.AUTO,
     linear_precision: LinearPrecision = LinearPrecision.BF16,
+    routed_expert_backend: RoutedExpertBackend = RoutedExpertBackend.AUTO,
 ) -> BackendStatus:
     requested = KernelBackend(requested)
     linear_precision = LinearPrecision(linear_precision)
@@ -96,6 +127,7 @@ def resolve_backend(
         selected = KernelBackend.REFERENCE
 
     selected_loss = _resolve_loss_backend(loss_backend, selected)
+    selected_experts = _resolve_routed_expert_backend(routed_expert_backend, selected)
     if linear_precision is LinearPrecision.FP8_CURRENT:
         if selected is not KernelBackend.H100:
             raise RuntimeError("linear_precision=fp8_current requires an NVIDIA SM90+ GPU")
@@ -124,7 +156,12 @@ def resolve_backend(
             kda="fla.ops.kda.chunk_kda",
             short_conv="fla.modules.ShortConvolution",
             attnres="fla.ops.attnres.fused_attnres(configurable checkpoint_level)",
-            expert_mlp="megablocks.permute+device_counts+grouped_gemm",
+            routed_expert_backend=selected_experts,
+            expert_mlp=(
+                "sonicmoe.bitmatrix+quack_grouped_gemm+fused_swiglu"
+                if selected_experts is RoutedExpertBackend.SONIC
+                else "megablocks.permute+device_counts+grouped_gemm"
+            ),
             linear_precision=linear_precision,
             dense_ffn=(
                 "transformer_engine.Linear(Float8CurrentScaling)"
@@ -144,6 +181,7 @@ def resolve_backend(
         kda="torch.recurrent_fp32",
         short_conv="torch.depthwise_conv1d",
         attnres="torch.depth_softmax",
+        routed_expert_backend=selected_experts,
         expert_mlp="torch.expert_loop",
         linear_precision=linear_precision,
         dense_ffn="torch.nn.Linear",

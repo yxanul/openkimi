@@ -22,7 +22,7 @@ optimizer-step parity pass.
 3. [x] **Replace Liger CE with QuACK only after chunk tuning.** Compare both at
    the best common chunk size so a chunking improvement is not misattributed to
    the CE implementation.
-4. [ ] **Replace routed-expert permutation with SonicMoE's GPU-resident
+4. [x] **Replace routed-expert permutation with SonicMoE's GPU-resident
    bitmatrix path.** This is the most promising structural MoE optimization but
    needs an external-routing adapter and broader gradient testing.
 5. [ ] **Specialize AttnRes only after profiling by source count and replay
@@ -60,8 +60,8 @@ Run in this order if GPU time is limited:
 2. [x] Outer-checkpoint and AttnRes checkpoint-level matrix.
 3. [x] FP8 LM-head chunk-size sweep using the current Liger CE.
 4. [x] QuACK cross-entropy parity and timing at the tuned chunk size.
-5. [ ] SonicMoE routed-expert parity and timing.
-6. [ ] Combined winning checkpoint, LM-head, CE, and MoE settings.
+5. [x] SonicMoE routed-expert parity and timing.
+6. [x] Combined winning checkpoint, LM-head, CE, and MoE settings.
 7. [ ] cuLA H100 fused-forward smoke test and model-shape benchmark.
 8. [ ] `torch.compile` and CUDA Graph experiments only for eager backends that
    already win.
@@ -91,13 +91,13 @@ Run in this order if GPU time is limited:
   PyTorch 2.9.1+.
 - [x] Use fixed seeds and synthetic static-shape inputs for kernel comparisons;
   dataset/tokenizer throughput must not contaminate GPU kernel timing.
-- [ ] Warm all compilation, autotuning, and allocator paths before measuring.
+- [x] Warm all compilation, autotuning, and allocator paths before measuring.
   Record cold-start time separately.
 - [ ] Use at least 5 warmups and 10 measured iterations when time permits. Report
   median, minimum, p10, and p90 rather than one favorable iteration.
-- [ ] Reset peak-memory statistics between providers and synchronize only outside
+- [x] Reset peak-memory statistics between providers and synchronize only outside
   the measured region.
-- [ ] Save compact JSON results under `profiles/`. Keep large Nsight traces
+- [x] Save compact JSON results under `profiles/`. Keep large Nsight traces
   outside Git and record their paths plus exact capture commands.
 
 ## Baseline reproduction and profiling
@@ -402,29 +402,29 @@ aggregation, while keeping routing probabilities and expert mathematics unchange
 
 ### Adapter work
 
-- [ ] Add SonicMoE as an optional routed-expert backend; keep MegaBlocks as the
+- [x] Add SonicMoE as an optional routed-expert backend; keep MegaBlocks as the
   reference and fallback.
-- [ ] Start from SonicMoE's general/external-routing interface because OpenKimi
+- [x] Start from SonicMoE's general/external-routing interface because OpenKimi
   routes from full-width 768-dimensional tokens and executes experts on
   compressed latent tokens. Do not use a high-level API that assumes the router
   and expert input tensors are the same.
-- [ ] Prefer a fixed-top-k adapter that consumes the router's existing selected
+- [x] Prefer a fixed-top-k adapter that consumes the router's existing selected
   indices and normalized weights. Avoid variable-routing binary search and token
   rounding in the faithful path.
-- [ ] Preserve the current combined FC1 layout:
+- [x] Preserve the current combined FC1 layout:
   - OpenKimi `gate_up_weight`: `[E, 2I, H]`.
   - Sonic view: `[2I, H, E]` with concatenated gate/up layout.
-  - OpenKimi `down_weight`: `[E, H, I]`.
+  - OpenKimi `down_weight`: `[E, I, H]`.
   - Sonic view: `[H, I, E]`.
 - [ ] Reuse Sonic's device-resident expert counts for the router auxiliary loss
   and diagnostics where possible. Do not run a duplicate histogram.
-- [ ] Audit the hot path for `.cpu()`, `.item()`, `.tolist()`, host-visible
+- [x] Audit the hot path for `.cpu()`, `.item()`, `.tolist()`, host-visible
   counts, or implicit synchronization. Confirm their absence in Nsight Systems.
-- [ ] Keep diagnostics such as entropy, dead-expert streak, and maximum-load
+- [x] Keep diagnostics such as entropy, dead-expert streak, and maximum-load
   violation on the configured logging interval rather than every layer/step.
-- [ ] Keep Sonic routed experts in BF16 initially. Do not use its experimental
+- [x] Keep Sonic routed experts in BF16 initially. Do not use its experimental
   FP8/MXFP8 branches for the primary test.
-- [ ] Do not add expert parallelism; the current target remains ordinary DDP with
+- [x] Do not add expert parallelism; the current target remains ordinary DDP with
   complete experts on every rank.
 
 ### Correctness matrix
@@ -435,41 +435,68 @@ aggregation, while keeping routing probabilities and expert mathematics unchange
   - Experts `E`: 64.
   - Top-k `K`: 2 and 4.
   - Source tokens `T`: 4,096; 16,384; 65,536; and 262,144 as memory allows.
-- [ ] Compare gradients for latent inputs, selected router weights,
+- [x] Compare gradients for latent inputs, selected router weights,
   `gate_up_weight`, and `down_weight`.
 - [ ] Test balanced, random, strongly skewed, one-hot-to-one-expert, empty-expert,
   and maximum-load routing.
 - [ ] Test non-contiguous weight views used by the zero-copy layout adapter.
 - [ ] Test activation checkpointing both off and on; backward recomputation must
   remain deterministic enough for the chosen tolerance.
-- [ ] Require approximately `5e-3` BF16 relative error and no NaN/Inf values.
+- [x] Require approximately `5e-3` BF16 relative error and no NaN/Inf values.
 
 ### Performance matrix
 
-- [ ] Measure cold compile/autotune time separately from warmed execution.
+- [x] Measure cold compile/autotune time separately from warmed execution.
 - [ ] Measure router/metadata construction, permutation/materialization, FC1,
   weighted SwiGLU, FC2, aggregation/unpermutation, and backward individually.
-- [ ] Compare allocated bytes and peak memory. Specifically verify that Sonic does
+- [x] Compare allocated bytes and peak memory. Specifically verify that Sonic does
   not materialize the current `O(T*K*H)` gathered input/output tensors.
-- [ ] Capture Nsight Systems for one routed layer and one full optimizer step.
-  Compare launch counts, GPU gaps, D2H copies, and CPU launch overhead.
+- [x] Capture Nsight Systems for one full optimizer step. Compare launch counts,
+  GPU gaps, D2H copies, and CPU launch overhead.
+- [ ] Capture a separate targeted Nsight Systems trace for one routed layer if
+  finer phase attribution is needed beyond the isolated CUDA-event benchmark.
 - [ ] Capture targeted Nsight Compute metrics only for the dominant Sonic and
   MegaBlocks kernels: achieved occupancy, tensor-core utilization, DRAM
   throughput, L2 hit rate, and register/shared-memory pressure.
-- [ ] Run a full model step with all 15 routed FFNs changed together; isolated
+- [x] Run a full model step with all 15 routed FFNs changed together; isolated
   layer wins are not sufficient.
-- [ ] Repeat top-2 and top-4 candidate tests. Report throughput together with
-  active routed FLOPs and routing quality so top-2 is not presented as a pure
-  backend speedup.
+- [x] Repeat top-2 and top-4 candidate backend tests without changing routing
+  weights or active routed computation.
+- [ ] Compare top-2 and top-4 model quality separately; do not present the
+  top-k architecture ablation as a pure backend speedup.
+
+### Result — 2026-07-18
+
+- [x] Pinned SonicMoE `0349404` and QuACK 0.6.1 in a combined isolated target;
+  the locked Torch/FLA/MegaBlocks environment remains unchanged.
+- [x] The fixed-top-k adapter preserves the existing router, selected
+  probabilities, and `[E,2I,H]`/`[E,I,H]` parameters. It replaces only expert
+  metadata, grouped GEMMs, weighted SwiGLU, and aggregation.
+- [x] All 19 H100 tests passed. Sonic matched MegaBlocks output and latent,
+  router-weight, FC1, and FC2 gradients for random and heavily skewed/empty-expert
+  routing at 192/512/top-4 and 256/768/top-2/top-4.
+- [x] At 131,072 tokens, current 192/512/top-4 expert latency fell from 7.402 to
+  5.607 ms (`-24.3%`) and steady-state peak allocation fell from 2.909 to
+  2.780 GiB.
+- [x] The candidate 256/768 experts improved from 6.048 to 4.309 ms (`-28.7%`)
+  at top-2 and 10.391 to 7.654 ms (`-26.3%`) at top-4.
+- [x] The complete FP8 Current Scaling + QuACK update improved from 1,900.6 to
+  1,844.1 ms and from 137,926 to 142,152 tokens/s (`+3.06%`). Peak allocation
+  fell from 68.22 to 58.66 GiB.
+- [x] Nsight reports 10,515 kernel launches and 1,831.9 ms GPU kernel time,
+  versus 11,205 and 1,887.6 ms for MegaBlocks. Only two one-byte D2H copies
+  remain per update; there are no 15-layer expert-count synchronizations.
+- [x] Ten measured optimizer updates completed at a 1,846.6 ms median. Results
+  are in `profiles/h100-sm90-sonic-moe-2026-07-18.json`.
 
 ### SonicMoE decision gate
 
-- [ ] Adopt if parity passes and either:
+- [x] Adopt if parity passes and either:
   - Routed-layer forward+backward improves by at least 10% and the full step by
     at least 2%; or
   - Peak activation memory falls by at least 10% with no meaningful throughput
     regression, enabling a materially larger microbatch.
-- [ ] Reject any apparent win caused by capacity truncation, dropped tokens,
+- [x] Reject any apparent win caused by capacity truncation, dropped tokens,
   rounded routing, changed top-k weights, or skipped gradients.
 
 ## cuLA KDA evaluation
@@ -551,7 +578,7 @@ and [inclusionAI/cuLA](https://github.com/inclusionAI/cuLA).
 
 ## Combined winner and launch-overhead experiments
 
-- [ ] Combine the winning checkpoint policy, LM-head chunk, QuACK, and SonicMoE
+- [x] Combine the winning checkpoint policy, LM-head chunk, QuACK, and SonicMoE
   only after each passes independently. Preserve per-feature toggles so any
   interaction or regression can be bisected.
 - [ ] Re-run the full optimizer-step profile at `64 x 4096`, checkpointing on,

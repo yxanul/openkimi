@@ -32,7 +32,7 @@ is zero-initialized.
 | KDA short convolution | causal PyTorch depthwise convolution | FLA Triton `ShortConvolution` |
 | NoPE MLA | PyTorch SDPA | SDPA FlashAttention backend |
 | Block AttnRes | readable depth softmax | FLA fused AttnRes + output RMSNorm, checkpoint level 1 |
-| Routed expert MLP | Python expert loop over stacked weights | MegaBlocks permutation + CUDA-count CUTLASS grouped GEMM + fused weighted SwiGLU |
+| Routed expert MLP | Python expert loop over stacked weights | Selectable MegaBlocks or SonicMoE bitmatrix metadata + QuACK grouped GEMM |
 | Dense/shared FFNs | PyTorch SwiGLU | BF16 default or TE 2.16 `Float8CurrentScaling`; gate/up share one FP8 GEMM |
 | LM loss | PyTorch cross-entropy | Liger BF16 default or chunked TE Current Scaling FP8 + Liger/QuACK CE; full 128K logits are omitted |
 | Router | softmax top-4 with balance/z losses; sigmoid no-aux ablation | same |
@@ -94,6 +94,23 @@ scripts/run_with_quack.sh \
 The installer uses exact package versions and `uv pip --target --no-deps`. This is deliberately
 different from asking `uv` to resolve QuACK's CUDA-13 extra inside the training environment; the
 upstream README warns that dependency installation order matters for that path.
+
+SonicMoE is also isolated because its current source metadata requires a newer Torch release than
+the pinned training stack. The installer combines pinned SonicMoE `0349404` and QuACK 0.6.1 in one
+target without changing the locked environment:
+
+```bash
+scripts/install_sonic_isolated.sh
+scripts/run_with_sonic.sh \
+  env K3MINI_RUN_GPU_TESTS=1 .venv/bin/pytest -m gpu tests/test_h100_parity.py
+scripts/run_with_sonic.sh \
+  .venv/bin/python scripts/profile_h100_step.py \
+    --config configs/h100-fp8-current-quack-sonic.json --warmup 2 --repeats 5
+```
+
+This exact-pinned BF16 path passes on Torch 2.7 with a small import-only FP4 dtype sentinel; it does
+not exercise Sonic's FP8/FP4 branches. The adapter deliberately uses Sonic's fixed-top-k internal
+primitives, so the pin must be updated together with the adapter and its CUDA parity tests.
 
 ## Configuration and commands
 
@@ -269,6 +286,19 @@ the BF16 reference within the same tolerances as Liger, ignored labels behave co
 measurements are in
 [`profiles/h100-sm90-quack-ce-2026-07-18.json`](profiles/h100-sm90-quack-ce-2026-07-18.json).
 
+Replacing MegaBlocks with the pinned SonicMoE fixed-top-k path reduced routed-expert
+forward/backward latency from 7.40 to 5.61 ms (`-24.3%`) at the real 131,072-token microbatch.
+The complete QuACK/FP8 optimizer update improved from 137,926 to 142,152 tokens/second (`+3.06%`),
+while peak allocated memory fell from 68.22 to 58.66 GiB. Nsight measured 10,515 launches versus
+11,205 for the MegaBlocks control and no per-layer D2H expert-count copies. The planned
+256-latent/768-hidden experts improved by `28.7%` at top-2 and `26.3%` at top-4 in standalone
+forward/backward tests. The selected opt-in profile is
+[`configs/h100-fp8-current-quack-sonic.json`](configs/h100-fp8-current-quack-sonic.json), with full
+results in
+[`profiles/h100-sm90-sonic-moe-2026-07-18.json`](profiles/h100-sm90-sonic-moe-2026-07-18.json).
+MegaBlocks remains the dependency-locked fallback and `auto` selection until the upstream
+Sonic/Torch version boundary can be resolved without an isolated target.
+
 GPU parity tests are opt-in:
 
 ```bash
@@ -298,6 +328,7 @@ demonstrating an end-to-end speedup.
 - [FLA fused AttnRes](https://github.com/fla-org/flash-linear-attention/blob/main/fla/ops/attnres/fused.py)
 - [Liger fused linear cross-entropy](https://github.com/linkedin/Liger-Kernel/blob/72a4ed47a5c593b58045a0af14d3f774a037bd92/src/liger_kernel/ops/fused_linear_cross_entropy.py)
 - [QuACK 0.6.1 cross-entropy](https://github.com/Dao-AILab/quack/blob/3a1c687a21e7d389c219b17aa448ea1c2f52d31a/quack/cross_entropy.py)
+- [SonicMoE](https://github.com/Dao-AILab/sonic-moe/tree/0349404acd7952592f73d180ff0c1510f6d112c2)
 - [Transformer Engine 2.16 GroupedLinear](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/pytorch.html)
 - [Transformer Engine FP8 Current Scaling](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/features/low_precision_training/fp8_current_scaling/fp8_current_scaling.html)
 - [Moonshot FlashKDA](https://github.com/MoonshotAI/FlashKDA)

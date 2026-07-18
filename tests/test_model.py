@@ -11,6 +11,7 @@ from k3mini.config import (
     LinearPrecision,
     LossBackend,
     ModelConfig,
+    RoutedExpertBackend,
     load_config,
 )
 from k3mini.fp8 import resolve_fp8_lm_head_chunk_size
@@ -128,6 +129,20 @@ def test_fp8_current_configuration_pads_only_the_physical_vocabulary() -> None:
     quack_cfg, data_cfg, train_cfg = load_config("configs/h100-fp8-current-quack.json")
     assert quack_cfg.loss_backend is LossBackend.QUACK
     assert quack_cfg.fp8_lm_head_chunk_size == 16_384
+    train_cfg.validate(data_cfg)
+
+    sonic_reference = ModelConfig(
+        kernel_backend=KernelBackend.REFERENCE,
+        routed_expert_backend=RoutedExpertBackend.SONIC,
+    )
+    with pytest.raises(ValueError, match="requires the H100"):
+        sonic_reference.validate()
+
+    sonic_cfg, data_cfg, train_cfg = load_config(
+        "configs/h100-fp8-current-quack-sonic.json"
+    )
+    assert sonic_cfg.routed_expert_backend is RoutedExpertBackend.SONIC
+    assert sonic_cfg.loss_backend is LossBackend.QUACK
     train_cfg.validate(data_cfg)
 
 

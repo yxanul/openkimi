@@ -12,7 +12,14 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 from .backends import BackendStatus, resolve_backend
-from .config import KernelBackend, LinearPrecision, LossBackend, ModelConfig, RouterType
+from .config import (
+    KernelBackend,
+    LinearPrecision,
+    LossBackend,
+    ModelConfig,
+    RoutedExpertBackend,
+    RouterType,
+)
 
 
 @torch.compiler.disable
@@ -489,6 +496,16 @@ class StackedRoutedExperts(nn.Module):
         )
 
     def forward(self, latent: torch.Tensor, indices: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
+        if self.backend.routed_expert_backend is RoutedExpertBackend.SONIC:
+            from .sonic import sonic_fixed_topk_experts
+
+            return sonic_fixed_topk_experts(
+                latent,
+                indices,
+                weights,
+                self.gate_up_weight,
+                self.down_weight,
+            )
         if self.backend.selected is KernelBackend.H100:
             return self._grouped(latent, indices, weights)
         return self._reference(latent, indices, weights)
@@ -811,6 +828,7 @@ class K3MiniForCausalLM(nn.Module):
             cfg.kernel_backend,
             cfg.loss_backend,
             cfg.linear_precision,
+            cfg.routed_expert_backend,
         )
         self.token_embedding = nn.Embedding(cfg.physical_vocab_size, cfg.d_model)
         self.layers = nn.ModuleList(

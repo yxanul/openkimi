@@ -8,7 +8,13 @@ import torch
 import torch.nn.functional as F
 
 from k3mini.backends import resolve_backend
-from k3mini.config import KernelBackend, LinearPrecision, LossBackend, ModelConfig
+from k3mini.config import (
+    KernelBackend,
+    LinearPrecision,
+    LossBackend,
+    ModelConfig,
+    RoutedExpertBackend,
+)
 from k3mini.model import (
     BlockAttnResRead,
     K3MiniForCausalLM,
@@ -23,6 +29,7 @@ H100_ENABLED = (
     and os.environ.get("K3MINI_RUN_GPU_TESTS") == "1"
 )
 QUACK_ENABLED = find_spec("quack") is not None
+SONIC_ENABLED = find_spec("sonicmoe") is not None
 pytestmark = [
     pytest.mark.gpu,
     pytest.mark.skipif(
@@ -502,3 +509,87 @@ def test_grouped_gemm_empty_and_heavy_expert_parity() -> None:
     assert _relative_error(output_grouped, output_reference) < 5e-3
     assert _relative_error(latent_grouped.grad, latent_reference.grad) < 5e-3
     assert _relative_error(grouped.gate_up_weight.grad, reference.gate_up_weight.grad) < 5e-3
+
+
+@pytest.mark.skipif(not SONIC_ENABLED, reason="the isolated SonicMoE stack is not installed")
+@pytest.mark.parametrize(
+    ("latent_dim", "expert_ffn_dim", "top_k"),
+    [(192, 512, 4), (256, 768, 2), (256, 768, 4)],
+)
+@pytest.mark.parametrize("routing_pattern", ["random", "skewed"])
+def test_sonic_fixed_topk_routed_expert_parity(
+    routing_pattern: str,
+    latent_dim: int,
+    expert_ffn_dim: int,
+    top_k: int,
+) -> None:
+    torch.manual_seed(260720)
+    cfg = ModelConfig(
+        latent_dim=latent_dim,
+        n_routed_experts=64,
+        top_k=top_k,
+        expert_ffn_dim=expert_ffn_dim,
+        kernel_backend=KernelBackend.H100,
+    )
+    megablocks = StackedRoutedExperts(
+        cfg,
+        resolve_backend(
+            KernelBackend.H100,
+            routed_expert_backend=RoutedExpertBackend.MEGABLOCKS,
+        ),
+    ).cuda()
+    sonic = StackedRoutedExperts(
+        cfg,
+        resolve_backend(
+            KernelBackend.H100,
+            routed_expert_backend=RoutedExpertBackend.SONIC,
+        ),
+    ).cuda()
+    sonic.load_state_dict(megablocks.state_dict())
+
+    token_count = 4_096
+    base_latent = torch.randn(
+        token_count,
+        cfg.latent_dim,
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    if routing_pattern == "random":
+        indices = torch.randn(
+            token_count,
+            cfg.n_routed_experts,
+            device="cuda",
+        ).topk(cfg.top_k, dim=-1).indices
+    else:
+        indices = torch.arange(cfg.top_k, device="cuda").expand(token_count, -1)
+    base_weights = torch.rand(token_count, cfg.top_k, device="cuda")
+    base_weights /= base_weights.sum(-1, keepdim=True)
+    gradient = torch.randn_like(base_latent)
+
+    def run(
+        module: StackedRoutedExperts,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        latent = base_latent.detach().clone().requires_grad_(True)
+        route_weights = base_weights.detach().clone().requires_grad_(True)
+        output = module(
+            latent,
+            indices,
+            route_weights.to(torch.bfloat16),
+        )
+        output.backward(gradient)
+        return (
+            output.detach(),
+            latent.grad.detach(),
+            route_weights.grad.detach(),
+            module.gate_up_weight.grad.detach(),
+            module.down_weight.grad.detach(),
+        )
+
+    expected = run(megablocks)
+    actual = run(sonic)
+    assert all(torch.isfinite(value).all() for value in actual)
+    for sonic_value, expected_value in zip(actual, expected, strict=True):
+        assert _relative_error(sonic_value, expected_value) < 6e-3
+    if routing_pattern == "skewed":
+        assert torch.count_nonzero(actual[3][cfg.top_k :]) == 0
+        assert torch.count_nonzero(actual[4][cfg.top_k :]) == 0

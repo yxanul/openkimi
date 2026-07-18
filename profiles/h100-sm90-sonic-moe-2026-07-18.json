@@ -1,0 +1,259 @@
+{
+  "date": "2026-07-18",
+  "sources": {
+    "openkimi_parent_commit": "8ca2e545b7f8511cab52a17f7a4a65a2d910f2b0",
+    "sonic_moe_version": "0.1.2.post1",
+    "sonic_moe_commit": "0349404acd7952592f73d180ff0c1510f6d112c2",
+    "quack_release": "0.6.1",
+    "quack_commit": "3a1c687a21e7d389c219b17aa448ea1c2f52d31a"
+  },
+  "hardware": {
+    "host": "gpu-ubuntu-12cpu-240gb-fi-hel2",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "driver": "595.58.03",
+    "system_cuda": "13.2",
+    "torch": "2.7.0+cu126",
+    "python": "3.12.3",
+    "transformer_engine": "2.16.0",
+    "nsight_systems": "2025.6.3"
+  },
+  "isolated_environment": {
+    "target_on_test_host": "/root/sonic-combined",
+    "installer": "scripts/install_sonic_isolated.sh",
+    "runner": "scripts/run_with_sonic.sh",
+    "dependency_policy": "Exact-pinned uv --target installs with --no-deps; the locked training environment is unchanged.",
+    "torch_2_7_compatibility": "An import-only torch.float4_e2m1fn_x2 sentinel permits the BF16 Sonic/QuACK path to load. No FP4 or Sonic FP8 kernels are used.",
+    "api_policy": "The external router and its BF16 selected weights are preserved. The adapter converts those weights to the FP32 storage required by Sonic's weighted-down epilogue and uses the pinned fixed-top-k _UpProjection/_DownProjection primitives directly. Updating Sonic requires rerunning all parity tests."
+  },
+  "conditions": {
+    "sequence_length": 4096,
+    "global_batch_tokens": 262144,
+    "microbatch_sequences": 32,
+    "gradient_accumulation_steps": 2,
+    "checkpoint_attention": true,
+    "checkpoint_ffn": false,
+    "attnres_checkpoint_level": 1,
+    "fp8_lm_head_chunk_rows": 16384,
+    "loss_backend": "QuACK",
+    "linear_precision": "Transformer Engine FP8 Current Scaling for eligible linears; BF16 Sonic routed experts",
+    "torch_compile": false,
+    "input": "Fixed-seed synthetic static-shape CUDA tensors"
+  },
+  "correctness": {
+    "h100_tests": "19 passed",
+    "tested_expert_shapes": [
+      {
+        "latent_dim": 192,
+        "expert_ffn_dim": 512,
+        "experts": 64,
+        "top_k": 4
+      },
+      {
+        "latent_dim": 256,
+        "expert_ffn_dim": 768,
+        "experts": 64,
+        "top_k": 2
+      },
+      {
+        "latent_dim": 256,
+        "expert_ffn_dim": 768,
+        "experts": 64,
+        "top_k": 4
+      }
+    ],
+    "routing_patterns": [
+      "random",
+      "heavily skewed with empty experts"
+    ],
+    "compared_gradients": [
+      "latent input",
+      "selected router weights",
+      "combined gate/up weight",
+      "down-projection weight"
+    ],
+    "relative_error_tolerance": 0.006,
+    "finite_checks": true
+  },
+  "isolated_forward_backward": [
+    {
+      "tokens": 131072,
+      "latent_dim": 192,
+      "expert_ffn_dim": 512,
+      "top_k": 4,
+      "megablocks_median_ms": 7.402431964874268,
+      "sonic_median_ms": 5.606560230255127,
+      "sonic_latency_reduction_percent": 24.260563867940178,
+      "megablocks_peak_allocated_gib": 2.909181594848633,
+      "sonic_peak_allocated_gib": 2.7802748680114746
+    },
+    {
+      "tokens": 131072,
+      "latent_dim": 256,
+      "expert_ffn_dim": 768,
+      "top_k": 2,
+      "megablocks_median_ms": 6.047872066497803,
+      "sonic_median_ms": 4.309279918670654,
+      "sonic_latency_reduction_percent": 28.747171380460944,
+      "megablocks_peak_allocated_gib": 2.364748001098633,
+      "sonic_peak_allocated_gib": 2.3090834617614746
+    },
+    {
+      "tokens": 131072,
+      "latent_dim": 256,
+      "expert_ffn_dim": 768,
+      "top_k": 4,
+      "megablocks_median_ms": 10.391167640686035,
+      "sonic_median_ms": 7.653759956359863,
+      "sonic_latency_reduction_percent": 26.343600440127684,
+      "megablocks_peak_allocated_gib": 4.370119094848633,
+      "sonic_peak_allocated_gib": 4.196290493011475
+    }
+  ],
+  "full_step_comparison": {
+    "megablocks_control": {
+      "elapsed_samples_ms": [
+        1900.357421875,
+        1901.2440185546875,
+        1900.105712890625,
+        1901.0323486328125,
+        1900.8492431640625,
+        1899.94873046875,
+        1900.61474609375
+      ],
+      "median_elapsed_ms": 1900.61474609375,
+      "tokens_per_second": 137925.9003113456,
+      "peak_allocated_gib": 68.21694898605347,
+      "peak_reserved_gib": 69.18359375
+    },
+    "sonic": {
+      "elapsed_samples_ms": [
+        1843.617919921875,
+        1844.107421875,
+        1844.6109619140625,
+        1843.664306640625,
+        1845.1553955078125,
+        1843.9625244140625,
+        1845.1600341796875
+      ],
+      "median_elapsed_ms": 1844.107421875,
+      "tokens_per_second": 142152.2395552557,
+      "peak_allocated_gib": 58.664772033691406,
+      "peak_reserved_gib": 59.607421875
+    },
+    "sonic_latency_reduction_percent": 2.9731077450012964,
+    "sonic_throughput_increase_percent": 3.0642100101357483,
+    "peak_allocated_change_gib": -9.55217695236206,
+    "peak_allocated_reduction_percent": 14.002644642337996
+  },
+  "winner_stability": {
+    "elapsed_samples_ms": [
+      1846.8310546875,
+      1846.3099365234375,
+      1846.186767578125,
+      1846.249755859375,
+      1847.2901611328125,
+      1846.446044921875,
+      1847.541748046875,
+      1845.7044677734375,
+      1909.6024169921875,
+      1847.422607421875
+    ],
+    "median_elapsed_ms": 1846.6385498046875,
+    "tokens_per_second": 141957.39606309315,
+    "peak_allocated_gib": 58.659400939941406,
+    "peak_reserved_gib": 59.607421875,
+    "result": "Ten consecutive measured AdamW updates completed; nine samples were within 1.84 ms and one host-noise outlier was retained."
+  },
+  "nsight_systems": {
+    "trace_file_on_test_host": "profiles/h100-quack-sonic-2026-07-18.nsys-rep",
+    "profiled_elapsed_ms": 1852.02587890625,
+    "profiled_tokens_per_second": 141544.45841481126,
+    "gpu_kernel_time_ms": 1831.913603,
+    "kernel_launches": 10515,
+    "megablocks_control_gpu_kernel_time_ms": 1887.598294,
+    "megablocks_control_kernel_launches": 11205,
+    "d2h_copies": 2,
+    "d2h_bytes": 2,
+    "d2h_time_ms": 0.003488,
+    "sonic_fixed_topk_metadata_ms": 0.869434,
+    "sonic_quack_grouped_gemm_ms": 99.124138,
+    "sonic_token_gather_sum_ms": 38.602562,
+    "top_remaining_kernels": [
+      {
+        "name": "chunk_kda_bwd_kernel_intra",
+        "launches": 24,
+        "milliseconds": 144.249737,
+        "percent_of_gpu_kernel_time": 7.874265290883373
+      },
+      {
+        "name": "BF16 vector add",
+        "launches": 662,
+        "milliseconds": 123.641727,
+        "percent_of_gpu_kernel_time": 6.749320863031989
+      },
+      {
+        "name": "chunk_kda_bwd_kernel_wy_dqkg_fused",
+        "launches": 24,
+        "milliseconds": 111.051849,
+        "percent_of_gpu_kernel_time": 6.062068037386586
+      },
+      {
+        "name": "attnres_bwd_kernel_dv",
+        "launches": 66,
+        "milliseconds": 86.714578,
+        "percent_of_gpu_kernel_time": 4.73355172743919
+      },
+      {
+        "name": "TE E5M2 cast_transpose_general",
+        "launches": 16,
+        "milliseconds": 70.503312,
+        "percent_of_gpu_kernel_time": 3.8486155615931628
+      },
+      {
+        "name": "attnres_fwd_kernel",
+        "launches": 98,
+        "milliseconds": 64.934128,
+        "percent_of_gpu_kernel_time": 3.5446064647187407
+      },
+      {
+        "name": "FlashAttention backward",
+        "launches": 8,
+        "milliseconds": 55.023722,
+        "percent_of_gpu_kernel_time": 3.0036199256281195
+      },
+      {
+        "name": "causal_conv1d_bwd_kernel",
+        "launches": 72,
+        "milliseconds": 50.467618,
+        "percent_of_gpu_kernel_time": 2.7549125634174354
+      },
+      {
+        "name": "QuACK CrossEntropy",
+        "launches": 16,
+        "milliseconds": 47.653809,
+        "percent_of_gpu_kernel_time": 2.6013131253548534
+      }
+    ],
+    "remaining_regions": [
+      "The two largest KDA backward kernels total 255.30 ms, or 13.94% of GPU kernel time.",
+      "The principal AttnRes forward, dv-backward, and dq/dw-backward kernels total 192.37 ms, or 10.50%.",
+      "The identifiable Sonic metadata, grouped-GEMM, and aggregation kernels total 138.60 ms, or 7.57%.",
+      "QuACK CE remains 47.65 ms, or 2.60%; it is no longer a leading bottleneck."
+    ],
+    "note": "The large raw Nsight report remains on the test host and is not committed."
+  },
+  "decision": {
+    "adopt": true,
+    "reason": "All tested output/gradient parity cases passed; routed forward/backward improved by 24.3%, full-step throughput improved by 3.06%, and peak allocation fell by 14.0%.",
+    "config": "configs/h100-fp8-current-quack-sonic.json",
+    "expected_tokens_per_second": 141957.39606309315,
+    "fallback": "MegaBlocks remains available and auto-selected when the isolated Sonic stack is absent."
+  },
+  "verification": {
+    "macos_tests": "18 passed, 21 platform-gated skips",
+    "macos_ruff": "passed",
+    "macos_compileall": "passed",
+    "h100_gpu_tests": "19 passed",
+    "isolated_installer_smoke": "A fresh exact-pinned combined target installed and imported successfully through scripts/run_with_sonic.sh."
+  }
+}

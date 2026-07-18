@@ -26,6 +26,13 @@ class LinearPrecision(StrEnum):
     FP8_CURRENT = "fp8_current"
 
 
+class RoutedExpertBackend(StrEnum):
+    AUTO = "auto"
+    REFERENCE = "reference"
+    MEGABLOCKS = "megablocks"
+    SONIC = "sonic"
+
+
 class RouterType(StrEnum):
     SOFTMAX = "softmax"
     SIGMOID_NOAUX = "sigmoid_noaux"
@@ -62,6 +69,7 @@ class ModelConfig:
     dropout: float = 0.0
     tie_embeddings: bool = True
     kernel_backend: KernelBackend = KernelBackend.AUTO
+    routed_expert_backend: RoutedExpertBackend = RoutedExpertBackend.AUTO
     loss_backend: LossBackend = LossBackend.AUTO
     linear_precision: LinearPrecision = LinearPrecision.BF16
     activation_checkpointing: bool = True
@@ -73,6 +81,7 @@ class ModelConfig:
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
         self.kernel_backend = KernelBackend(self.kernel_backend)
+        self.routed_expert_backend = RoutedExpertBackend(self.routed_expert_backend)
         self.loss_backend = LossBackend(self.loss_backend)
         self.linear_precision = LinearPrecision(self.linear_precision)
 
@@ -134,6 +143,19 @@ class ModelConfig:
             raise ValueError("router_topk_groups must be in [1, router_num_groups]")
         if self.kernel_backend is KernelBackend.H100 and self.kda_head_dim != 128:
             raise ValueError("the optimized H100 KDA profile requires kda_head_dim=128")
+        if self.kernel_backend is KernelBackend.REFERENCE and (
+            self.routed_expert_backend
+            not in {RoutedExpertBackend.AUTO, RoutedExpertBackend.REFERENCE}
+        ):
+            raise ValueError(
+                f"routed_expert_backend={self.routed_expert_backend.value} "
+                "requires the H100 kernel backend"
+            )
+        if (
+            self.kernel_backend is KernelBackend.H100
+            and self.routed_expert_backend is RoutedExpertBackend.REFERENCE
+        ):
+            raise ValueError("routed_expert_backend=reference requires kernel_backend=reference")
         if self.linear_precision is LinearPrecision.FP8_CURRENT:
             if self.kernel_backend is KernelBackend.REFERENCE:
                 raise ValueError("linear_precision=fp8_current requires the H100 kernel backend")

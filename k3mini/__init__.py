@@ -6,6 +6,7 @@ from .config import (
     LinearPrecision,
     LossBackend,
     ModelConfig,
+    RoutedExpertBackend,
     RouterType,
     TrainConfig,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "LossBackend",
     "ModelConfig",
     "ModelOutput",
+    "RoutedExpertBackend",
     "RouterType",
     "TrainConfig",
 ]
