@@ -277,5 +277,12 @@ def test_muon_partition_excludes_tied_embedding(tiny_model_config) -> None:
     assert id(model.token_embedding.weight) in {
         id(parameter) for parameter in adam_decay
     }
+    router_weight_ids = {
+        id(module.router.weight)
+        for module in model.modules()
+        if isinstance(module, LatentMoE)
+    }
+    assert not router_weight_ids.intersection(id(parameter) for parameter in muon)
+    assert router_weight_ids.issubset(id(parameter) for parameter in adam_decay)
     assert all(parameter.ndim >= 2 for parameter in muon)
     assert all(parameter.ndim < 2 for parameter in adam_no_decay)

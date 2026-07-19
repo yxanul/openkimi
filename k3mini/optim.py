@@ -50,8 +50,11 @@ def _uses_muon(
     parameter: torch.nn.Parameter,
     embedding_parameter_ids: set[int],
 ) -> bool:
-    del name
-    return parameter.ndim >= 2 and id(parameter) not in embedding_parameter_ids
+    return (
+        parameter.ndim >= 2
+        and id(parameter) not in embedding_parameter_ids
+        and ".router.weight" not in name
+    )
 
 
 def partition_muon_parameters(

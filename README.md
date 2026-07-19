@@ -171,8 +171,10 @@ perplexity continue to use the main next-token path. The optimized candidate pro
 depths 3/4.
 
 `optimizer: "muonclip"` sends non-embedding matrix weights to the pinned Dao-AILab
-Gram-Newton-Schulz Muon implementation and leaves the tied embedding/head, scalars, biases, and
-norms on AdamW. Muon defaults to a base learning rate of `8e-3`, RMS adjustment, one GNS restart,
+Gram-Newton-Schulz Muon implementation and leaves the tied embedding/head, MoE routers, scalars,
+biases, and norms on AdamW. Router matrices are deliberately excluded because the candidate's
+small sigmoid/no-aux routers collapsed under the `8e-3` Muon schedule in an observed 7.86M-token
+stability run. Muon defaults to a base learning rate of `8e-3`, RMS adjustment, one GNS restart,
 and decoupled weight decay. Moonshot-style per-head QK-Clip observes NoPE MLA logits during the
 forward pass and rescales offending Q/K projections after the optimizer update; the default
 threshold is 100.
