@@ -31,7 +31,8 @@
     "kernel_backend": "h100",
     "loss_backend": "liger",
     "linear_precision": "fp8_current",
-    "activation_checkpointing": true
+    "activation_checkpointing": true,
+    "mtp_depth": 0
   },
   "data": {
     "dataset_name": "OptimalScale/ClimbMix",

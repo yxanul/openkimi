@@ -38,6 +38,11 @@ class RouterType(StrEnum):
     SIGMOID_NOAUX = "sigmoid_noaux"
 
 
+class OptimizerType(StrEnum):
+    ADAMW = "adamw"
+    MUONCLIP = "muonclip"
+
+
 @dataclass(slots=True)
 class ModelConfig:
     vocab_size: int = 128_001
@@ -78,6 +83,9 @@ class ModelConfig:
     checkpoint_ffn: bool | None = None
     attnres_checkpoint_level: int = 1
     fp8_lm_head_chunk_size: int | None = None
+    mtp_depth: int = 1
+    mtp_loss_weight: float = 0.1
+    mtp_activation_checkpointing: bool = True
 
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
@@ -123,6 +131,10 @@ class ModelConfig:
             raise ValueError("attnres_block_size must be positive")
         if self.attnres_checkpoint_level not in (0, 1):
             raise ValueError("attnres_checkpoint_level must be 0 or 1")
+        if self.mtp_depth < 0:
+            raise ValueError("mtp_depth must be non-negative")
+        if self.mtp_loss_weight < 0:
+            raise ValueError("mtp_loss_weight must be non-negative")
         if self.fp8_lm_head_chunk_size is not None:
             if self.linear_precision is not LinearPrecision.FP8_CURRENT:
                 raise ValueError(
@@ -213,6 +225,14 @@ class TrainConfig:
     microbatch_sequences: int = 1
     learning_rate: float = 3e-4
     min_learning_rate: float = 3e-5
+    optimizer: OptimizerType = OptimizerType.ADAMW
+    muon_learning_rate: float = 8e-3
+    muon_min_learning_rate: float = 8e-4
+    muon_momentum: float = 0.95
+    muon_nesterov: bool = True
+    muon_ns_max_batch_size: int | None = 128
+    qk_clip_threshold: float = 100.0
+    qk_clip_query_chunk_size: int = 256
     betas: tuple[float, float] = (0.9, 0.95)
     adam_epsilon: float = 1e-8
     weight_decay: float = 0.1
@@ -224,9 +244,28 @@ class TrainConfig:
     precision: str = "bf16"
     seed: int = 1234
     compile_model: bool = False
+    max_duration_seconds: int | None = None
+    wandb_enabled: bool = False
+    wandb_project: str = "openkimi"
+    wandb_entity: str | None = None
+    wandb_run_name: str | None = None
+    wandb_run_id: str | None = None
+    wandb_mode: str = "online"
+    wandb_tags: tuple[str, ...] = ()
+    wandb_router_histogram_every_logs: int = 10
+    eval_tasks: tuple[str, ...] = ()
+    eval_every_seconds: int = 0
+    eval_limit: int | None = None
+    eval_batch_size: int = 8
+    eval_num_fewshot: int | None = None
+    eval_bootstrap_iters: int = 0
+    eval_cache: str = "data/lm-eval-cache.sqlite"
 
     def __post_init__(self) -> None:
         self.betas = tuple(self.betas)  # type: ignore[assignment]
+        self.optimizer = OptimizerType(self.optimizer)
+        self.wandb_tags = tuple(self.wandb_tags)
+        self.eval_tasks = tuple(self.eval_tasks)
 
     def validate(self, data: DataConfig, world_size: int = 1) -> None:
         tokens_per_microbatch = data.sequence_length * self.microbatch_sequences * world_size
@@ -238,6 +277,34 @@ class TrainConfig:
             raise ValueError("precision must be bf16 or fp32")
         if self.target_tokens < self.global_batch_tokens:
             raise ValueError("target_tokens must be at least one global batch")
+        if self.optimizer is OptimizerType.MUONCLIP and world_size != 1:
+            raise ValueError(
+                "the pinned Gram Newton-Schulz Muon implementation is single-GPU only"
+            )
+        if self.muon_learning_rate <= 0 or self.muon_min_learning_rate < 0:
+            raise ValueError("Muon learning rates must be positive")
+        if not 0 <= self.muon_momentum < 1:
+            raise ValueError("muon_momentum must be in [0, 1)")
+        if self.muon_ns_max_batch_size is not None and self.muon_ns_max_batch_size < 1:
+            raise ValueError("muon_ns_max_batch_size must be positive or null")
+        if self.qk_clip_threshold <= 0:
+            raise ValueError("qk_clip_threshold must be positive")
+        if self.qk_clip_query_chunk_size < 1:
+            raise ValueError("qk_clip_query_chunk_size must be positive")
+        if self.max_duration_seconds is not None and self.max_duration_seconds < 1:
+            raise ValueError("max_duration_seconds must be positive or null")
+        if self.wandb_mode not in {"online", "offline", "disabled"}:
+            raise ValueError("wandb_mode must be online, offline, or disabled")
+        if self.wandb_router_histogram_every_logs < 1:
+            raise ValueError("wandb_router_histogram_every_logs must be positive")
+        if self.eval_every_seconds < 0:
+            raise ValueError("eval_every_seconds must be non-negative")
+        if self.eval_limit is not None and self.eval_limit < 1:
+            raise ValueError("eval_limit must be positive or null")
+        if self.eval_batch_size < 1:
+            raise ValueError("eval_batch_size must be positive")
+        if self.eval_bootstrap_iters < 0:
+            raise ValueError("eval_bootstrap_iters must be non-negative")
 
     def gradient_accumulation(self, data: DataConfig, world_size: int) -> int:
         self.validate(data, world_size)

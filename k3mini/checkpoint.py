@@ -12,6 +12,7 @@ import torch
 import torch.distributed as dist
 
 from .config import DataConfig, ModelConfig, TrainConfig
+from .optim import OptimizerLike
 
 
 def capture_rng_state() -> dict[str, Any]:
@@ -57,7 +58,7 @@ class CheckpointManager:
         consumed_tokens: int,
         update: int,
         model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
+        optimizer: OptimizerLike,
         scaler: torch.amp.GradScaler | None,
         data_stream: Any,
         model_config: ModelConfig,
@@ -115,7 +116,7 @@ class CheckpointManager:
         checkpoint: str | Path,
         *,
         model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer | None,
+        optimizer: OptimizerLike | None,
         scaler: torch.amp.GradScaler | None,
         data_stream: Any | None,
     ) -> dict[str, int]:

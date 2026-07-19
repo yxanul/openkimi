@@ -24,6 +24,7 @@ from k3mini.model import (
     estimate_parameter_counts,
     kda_recurrent_reference,
 )
+from k3mini.optim import partition_muon_parameters
 from k3mini.training import build_optimizer
 
 
@@ -58,6 +59,32 @@ def test_nope_mla_is_causal(tiny_model_config) -> None:
         original = module(x)
         future_changed = module(changed)
     torch.testing.assert_close(original[:, :6], future_changed[:, :6], atol=1e-5, rtol=1e-5)
+
+
+def test_qk_clip_scales_only_heads_above_threshold(tiny_model_config) -> None:
+    module = NoPELatentAttention(tiny_model_config)
+    module.configure_qk_clip(enabled=True, query_chunk_size=4)
+    with torch.no_grad():
+        module.observed_max_attention_logits.copy_(
+            torch.tensor([200.0, 100.0, 50.0, 25.0])
+        )
+        query_before = module.q_proj.weight.clone()
+        kv_before = module.kv_b_proj.weight.clone()
+    diagnostics = module.apply_qk_clip(100.0)
+    query_after = module.q_proj.weight.view(4, 8, -1)
+    query_before = query_before.view(4, 8, -1)
+    torch.testing.assert_close(query_after[0], query_before[0] * 2**-0.5)
+    torch.testing.assert_close(query_after[1:], query_before[1:])
+    kv_after = module.kv_b_proj.weight.view(4, 16, -1)
+    kv_before = kv_before.view(4, 16, -1)
+    torch.testing.assert_close(kv_after[0, :8], kv_before[0, :8] * 2**-0.5)
+    torch.testing.assert_close(kv_after[0, 8:], kv_before[0, 8:])
+    torch.testing.assert_close(kv_after[1:], kv_before[1:])
+    assert diagnostics == {
+        "maximum_attention_logit": 200.0,
+        "clipped_heads": 1,
+        "minimum_scale": pytest.approx(2**-0.5),
+    }
 
 
 def test_attnres_zero_query_is_average_and_gradients(tiny_model_config) -> None:
@@ -181,3 +208,67 @@ def test_full_optimizer_step_and_no_weight_decay_groups(tiny_model_config, tiny_
     output.loss.backward()
     optimizer.step()
     assert not torch.equal(before, model.token_embedding.weight)
+
+
+def test_mtp_is_training_only_and_backpropagates_to_backbone(tiny_model_config) -> None:
+    cfg = copy.deepcopy(tiny_model_config)
+    cfg.mtp_depth = 2
+    cfg.mtp_loss_weight = 0.1
+    model = K3MiniForCausalLM(cfg).train()
+    tokens = torch.randint(0, cfg.vocab_size, (1, 7))
+    output = model(tokens, tokens)
+    assert output.mtp_loss is not None and torch.isfinite(output.mtp_loss)
+    assert output.loss is not None
+    output.loss.backward()
+    assert model.layers[0].mixer.q_proj.weight.grad is not None
+    assert model.mtp_stages[0].input_projection.weight.grad is not None
+    assert model.mtp_stages[1].input_projection.weight.grad is not None
+
+    model.eval()
+    with torch.no_grad():
+        evaluation_output = model(tokens, tokens)
+    assert evaluation_output.mtp_loss is None
+    assert evaluation_output.lm_loss is not None
+
+
+def test_sigmoid_checkpoint_replay_does_not_double_router_load(
+    tiny_model_config,
+) -> None:
+    cfg = copy.deepcopy(tiny_model_config)
+    cfg.router_type = "sigmoid_noaux"
+    cfg.activation_checkpointing = True
+    cfg.checkpoint_attention = True
+    cfg.checkpoint_ffn = True
+    model = K3MiniForCausalLM(cfg).train()
+    tokens = torch.randint(0, cfg.vocab_size, (1, 6))
+    output = model(tokens, tokens)
+    loads_after_forward = [
+        module.pending_load.clone()
+        for module in model.modules()
+        if module.__class__.__name__ == "SigmoidNoAuxTopKRouter"
+    ]
+    assert output.loss is not None
+    output.loss.backward()
+    loads_after_backward = [
+        module.pending_load
+        for module in model.modules()
+        if module.__class__.__name__ == "SigmoidNoAuxTopKRouter"
+    ]
+    for forward_load, backward_load in zip(
+        loads_after_forward,
+        loads_after_backward,
+        strict=True,
+    ):
+        torch.testing.assert_close(forward_load, backward_load)
+        assert int(forward_load.sum().item()) == tokens.numel() * cfg.top_k
+
+
+def test_muon_partition_excludes_tied_embedding(tiny_model_config) -> None:
+    model = K3MiniForCausalLM(tiny_model_config)
+    muon, adam_decay, adam_no_decay = partition_muon_parameters(model)
+    assert id(model.token_embedding.weight) not in {id(parameter) for parameter in muon}
+    assert id(model.token_embedding.weight) in {
+        id(parameter) for parameter in adam_decay
+    }
+    assert all(parameter.ndim >= 2 for parameter in muon)
+    assert all(parameter.ndim < 2 for parameter in adam_no_decay)

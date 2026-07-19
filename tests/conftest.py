@@ -27,6 +27,7 @@ def tiny_model_config() -> ModelConfig:
         dense_ffn_dim=24,
         kernel_backend=KernelBackend.REFERENCE,
         activation_checkpointing=False,
+        mtp_depth=0,
     )
 
 

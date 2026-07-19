@@ -24,7 +24,8 @@
     "tie_embeddings": true,
     "kernel_backend": "h100",
     "loss_backend": "liger",
-    "activation_checkpointing": true
+    "activation_checkpointing": true,
+    "mtp_depth": 0
   },
   "data": {
     "sequence_length": 256,

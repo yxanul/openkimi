@@ -20,7 +20,8 @@
     "router_type": "softmax",
     "tie_embeddings": true,
     "kernel_backend": "reference",
-    "activation_checkpointing": false
+    "activation_checkpointing": false,
+    "mtp_depth": 0
   },
   "data": {
     "sequence_length": 32,

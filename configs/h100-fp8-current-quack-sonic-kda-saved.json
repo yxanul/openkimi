@@ -37,7 +37,8 @@
     "checkpoint_attention": true,
     "checkpoint_ffn": false,
     "attnres_checkpoint_level": 1,
-    "fp8_lm_head_chunk_size": 16384
+    "fp8_lm_head_chunk_size": 16384,
+    "mtp_depth": 0
   },
   "data": {
     "dataset_name": "OptimalScale/ClimbMix",

@@ -34,7 +34,8 @@
     "activation_checkpointing": true,
     "checkpoint_attention": true,
     "checkpoint_ffn": false,
-    "attnres_checkpoint_level": 1
+    "attnres_checkpoint_level": 1,
+    "mtp_depth": 0
   },
   "data": {
     "dataset_name": "OptimalScale/ClimbMix",

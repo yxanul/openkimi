@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +37,7 @@ def _run_external_fused_loss(
 class ModelOutput:
     loss: torch.Tensor | None
     lm_loss: torch.Tensor | None
+    mtp_loss: torch.Tensor | None
     router_aux_loss: torch.Tensor
     router_z_loss: torch.Tensor
     logits: torch.Tensor | None = None
@@ -242,6 +244,82 @@ class NoPELatentAttention(nn.Module):
             bias=False,
         )
         self.out_proj = nn.Linear(self.n_heads * self.v_head_dim, cfg.d_model, bias=False)
+        self.track_qk_logits = False
+        self.qk_clip_query_chunk_size = 256
+        self.register_buffer(
+            "observed_max_attention_logits",
+            torch.full((self.n_heads,), -torch.inf),
+            persistent=False,
+        )
+
+    @torch.no_grad()
+    def _observe_attention_logits(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+    ) -> None:
+        maximum = torch.full(
+            (self.n_heads,),
+            -torch.inf,
+            device=q.device,
+            dtype=torch.float32,
+        )
+        key_transpose = k.detach().transpose(-1, -2)
+        scale = self.qk_head_dim**-0.5
+        for start in range(0, q.shape[-2], self.qk_clip_query_chunk_size):
+            query = q.detach()[
+                :,
+                :,
+                start : start + self.qk_clip_query_chunk_size,
+            ]
+            logits = torch.matmul(query, key_transpose) * scale
+            maximum.maximum_(logits.float().amax(dim=(0, 2, 3)))
+        self.observed_max_attention_logits.maximum_(
+            maximum.to(self.observed_max_attention_logits)
+        )
+
+    def configure_qk_clip(
+        self,
+        *,
+        enabled: bool,
+        query_chunk_size: int,
+    ) -> None:
+        if query_chunk_size < 1:
+            raise ValueError("query_chunk_size must be positive")
+        self.track_qk_logits = enabled
+        self.qk_clip_query_chunk_size = query_chunk_size
+        self.observed_max_attention_logits.fill_(-torch.inf)
+
+    @torch.no_grad()
+    def apply_qk_clip(self, threshold: float) -> dict[str, float | int]:
+        maximum = self.observed_max_attention_logits.clone()
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(maximum, op=dist.ReduceOp.MAX)
+        finite = torch.isfinite(maximum)
+        safe_maximum = torch.where(finite, maximum, torch.zeros_like(maximum))
+        gamma = torch.where(
+            safe_maximum > threshold,
+            threshold / safe_maximum.clamp_min(torch.finfo(torch.float32).tiny),
+            torch.ones_like(safe_maximum),
+        )
+        scale = gamma.sqrt().to(self.q_proj.weight)
+        self.q_proj.weight.view(
+            self.n_heads,
+            self.qk_head_dim,
+            -1,
+        ).mul_(scale[:, None, None])
+        kv_weight = self.kv_b_proj.weight.view(
+            self.n_heads,
+            self.qk_head_dim + self.v_head_dim,
+            self.kv_lora_rank,
+        )
+        kv_weight[:, : self.qk_head_dim].mul_(scale[:, None, None])
+        self.observed_max_attention_logits.fill_(-torch.inf)
+        return {
+            "maximum_attention_logit": float(safe_maximum.max().item()),
+            "clipped_heads": int((gamma < 1).sum().item()),
+            "minimum_scale": float(scale.float().min().item()),
+        }
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch, time, _ = x.shape
@@ -249,9 +327,12 @@ class NoPELatentAttention(nn.Module):
         compressed = self.kv_a_norm(self.kv_a_proj(x))
         kv = self.kv_b_proj(compressed).view(batch, time, self.n_heads, self.qk_head_dim + self.v_head_dim)
         k, v = torch.split(kv, [self.qk_head_dim, self.v_head_dim], dim=-1)
+        k = k.transpose(1, 2)
+        if self.training and self.track_qk_logits:
+            self._observe_attention_logits(q, k)
         output = F.scaled_dot_product_attention(
             q,
-            k.transpose(1, 2),
+            k,
             v.transpose(1, 2),
             is_causal=True,
             dropout_p=0.0,
@@ -364,6 +445,16 @@ class SigmoidNoAuxTopKRouter(nn.Module):
         self.register_buffer("last_entropy", torch.zeros(()))
         self.register_buffer("last_max_load_violation", torch.zeros(()))
         self.register_buffer("consecutive_dead_steps", torch.zeros(self.n_experts, dtype=torch.long))
+        self.record_load = True
+
+    @contextmanager
+    def suppress_load_recording(self):
+        previous = self.record_load
+        self.record_load = False
+        try:
+            yield
+        finally:
+            self.record_load = previous
 
     def _group_mask(self, scores: torch.Tensor) -> torch.Tensor:
         if self.n_groups == 1:
@@ -394,7 +485,8 @@ class SigmoidNoAuxTopKRouter(nn.Module):
             entropy = logits.new_zeros(())
             max_violation = logits.new_zeros(())
         with torch.no_grad():
-            self.pending_load.add_(load.to(self.pending_load))
+            if self.record_load:
+                self.pending_load.add_(load.to(self.pending_load))
             if collect_diagnostics:
                 self.last_entropy.copy_(entropy)
                 self.last_max_load_violation.copy_(max_violation)
@@ -731,10 +823,7 @@ class K3MiniBlock(nn.Module):
         state.add(attn_output)
 
         ffn_sources = state.sources()
-        can_checkpoint_ffn = checkpoint_ffn and (
-            self.is_dense
-            or (isinstance(self.ffn, LatentMoE) and isinstance(self.ffn.router, SoftmaxTopKRouter))
-        )
+        can_checkpoint_ffn = checkpoint_ffn
         if can_checkpoint_ffn:
 
             def ffn_step(*sources: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -760,16 +849,36 @@ class K3MiniBlock(nn.Module):
                 )
                 return result, step_routing.auxiliary_loss, step_routing.z_loss
 
+            sigmoid_router = (
+                self.ffn.router
+                if isinstance(self.ffn, LatentMoE)
+                and isinstance(self.ffn.router, SigmoidNoAuxTopKRouter)
+                else None
+            )
+
+            def checkpoint_contexts():
+                recompute = (
+                    sigmoid_router.suppress_load_recording()
+                    if sigmoid_router is not None
+                    else nullcontext()
+                )
+                return nullcontext(), recompute
+
             if self.use_fp8_linears:
                 from .fp8 import te_checkpoint
 
-                ffn_output, auxiliary_loss, z_loss = te_checkpoint(ffn_step, *ffn_sources)
+                ffn_output, auxiliary_loss, z_loss = te_checkpoint(
+                    ffn_step,
+                    *ffn_sources,
+                    context_fn=checkpoint_contexts,
+                )
             else:
                 ffn_output, auxiliary_loss, z_loss = checkpoint(
                     ffn_step,
                     *ffn_sources,
                     use_reentrant=False,
                     preserve_rng_state=False,
+                    context_fn=checkpoint_contexts,
                 )
             ffn_weights = None
             router_stats = {}
@@ -821,6 +930,88 @@ class K3MiniBlock(nn.Module):
         )
 
 
+class MTPStage(nn.Module):
+    """DeepSeek-style sequential training-only multi-token prediction stage."""
+
+    def __init__(self, cfg: ModelConfig, backend: BackendStatus) -> None:
+        super().__init__()
+        self.hidden_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
+        self.token_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
+        self.use_fp8_projection = cfg.linear_precision is LinearPrecision.FP8_CURRENT
+        if self.use_fp8_projection:
+            from .fp8 import CurrentScalingLinear
+
+            self.input_projection: nn.Module = CurrentScalingLinear(
+                2 * cfg.d_model,
+                cfg.d_model,
+            )
+        else:
+            self.input_projection = nn.Linear(2 * cfg.d_model, cfg.d_model, bias=False)
+        # layer_idx=1 selects the dominant KDA + LatentMoE block, not the
+        # first-layer dense FFN or the every-fourth global attention block.
+        self.block = K3MiniBlock(cfg, layer_idx=1, backend=backend)
+        self.final_read = BlockAttnResRead(
+            cfg.d_model,
+            cfg.rms_norm_eps,
+            backend,
+            cfg.attnres_checkpoint_level,
+        )
+        self.final_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
+        self.attnres_block_size = cfg.attnres_block_size
+
+    def forward(
+        self,
+        previous_hidden: torch.Tensor,
+        future_embedding: torch.Tensor,
+        *,
+        diagnostics: bool,
+        checkpoint_attention: bool,
+        checkpoint_ffn: bool,
+        is_first_microbatch: bool | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict[str, Any]]:
+        if previous_hidden.shape != future_embedding.shape:
+            raise ValueError("MTP hidden and future embedding shapes must match")
+        fused_input = torch.cat(
+            (
+                self.hidden_norm(previous_hidden),
+                self.token_norm(future_embedding),
+            ),
+            dim=-1,
+        )
+        if self.use_fp8_projection:
+            projected = self.input_projection(
+                fused_input,
+                is_first_microbatch=is_first_microbatch,
+            )
+        else:
+            projected = self.input_projection(fused_input)
+        state = BlockAttnResState(projected, self.attnres_block_size)
+        auxiliary_loss, z_loss, block_diagnostics = self.block(
+            state,
+            diagnostics=diagnostics,
+            checkpoint_attention=checkpoint_attention,
+            checkpoint_ffn=checkpoint_ffn,
+            is_first_microbatch=is_first_microbatch,
+        )
+        hidden, final_weights = self.final_read(
+            state.sources(),
+            output_norm_weight=self.final_norm.weight,
+            return_weights=diagnostics,
+        )
+        return (
+            hidden,
+            auxiliary_loss,
+            z_loss,
+            {
+                "block": block_diagnostics,
+                "final_attnres_weights": final_weights,
+                "attnres_sources": len(state.sources()),
+            }
+            if diagnostics
+            else {},
+        )
+
+
 class K3MiniForCausalLM(nn.Module):
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__()
@@ -844,6 +1035,9 @@ class K3MiniForCausalLM(nn.Module):
         )
         self.final_norm = RMSNorm(cfg.d_model, cfg.rms_norm_eps)
         self.lm_head = nn.Linear(cfg.d_model, cfg.physical_vocab_size, bias=False)
+        self.mtp_stages = nn.ModuleList(
+            MTPStage(cfg, self.backend) for _ in range(cfg.mtp_depth)
+        )
         if cfg.linear_precision is LinearPrecision.FP8_CURRENT:
             from .fp8 import (
                 CurrentScalingFusedLinearCrossEntropyLoss,
@@ -990,6 +1184,7 @@ class K3MiniForCausalLM(nn.Module):
         router_aux = torch.stack(aux_losses).mean() if aux_losses else zero
         router_z = torch.stack(z_losses).mean() if z_losses else zero
         lm_loss: torch.Tensor | None = None
+        mtp_loss: torch.Tensor | None = None
         logits: torch.Tensor | None = (
             self.lm_head(hidden)[..., : self.cfg.vocab_size]
             if return_logits and labels is None
@@ -998,20 +1193,64 @@ class K3MiniForCausalLM(nn.Module):
         total_loss: torch.Tensor | None = None
         if labels is not None:
             lm_loss, logits = self._lm_loss(hidden, labels, return_logits)
+            if self.training and self.mtp_stages:
+                mtp_hidden = hidden
+                mtp_losses: list[torch.Tensor] = []
+                mtp_diagnostics: list[dict[str, Any]] = []
+                for depth, stage in enumerate(self.mtp_stages):
+                    offset = depth + 1
+                    if mtp_hidden.shape[1] < 2 or embedding.shape[1] <= offset:
+                        raise ValueError(
+                            "sequence length must exceed configured MTP depth"
+                        )
+                    mtp_hidden, mtp_aux, mtp_z, stage_diagnostics = stage(
+                        mtp_hidden[:, :-1],
+                        embedding[:, offset:],
+                        diagnostics=return_diagnostics,
+                        checkpoint_attention=(
+                            can_checkpoint
+                            and self.cfg.mtp_activation_checkpointing
+                        ),
+                        checkpoint_ffn=(
+                            can_checkpoint
+                            and self.cfg.mtp_activation_checkpointing
+                        ),
+                        is_first_microbatch=is_first_microbatch,
+                    )
+                    depth_loss, _ = self._lm_loss(
+                        mtp_hidden,
+                        labels[:, offset:],
+                        return_logits=False,
+                    )
+                    mtp_losses.append(depth_loss)
+                    aux_losses.append(mtp_aux)
+                    z_losses.append(mtp_z)
+                    if return_diagnostics:
+                        mtp_diagnostics.append(stage_diagnostics)
+                mtp_loss = torch.stack(mtp_losses).mean()
+                router_aux = torch.stack(aux_losses).mean()
+                router_z = torch.stack(z_losses).mean()
+            else:
+                mtp_diagnostics = []
             total_loss = (
                 lm_loss
+                + self.cfg.mtp_loss_weight * (mtp_loss if mtp_loss is not None else zero)
                 + self.cfg.router_aux_loss_coefficient * router_aux
                 + self.cfg.router_z_loss_coefficient * router_z
             )
+        else:
+            mtp_diagnostics = []
         return ModelOutput(
             loss=total_loss,
             lm_loss=lm_loss,
+            mtp_loss=mtp_loss,
             router_aux_loss=router_aux,
             router_z_loss=router_z,
             logits=logits,
             diagnostics={
                 "backend": self.backend.as_dict(),
                 "layers": layer_diagnostics,
+                "mtp_stages": mtp_diagnostics,
                 "final_attnres_weights": final_weights,
                 "attnres_sources": len(state.sources()),
             }
@@ -1024,6 +1263,43 @@ class K3MiniForCausalLM(nn.Module):
         for module in self.modules():
             if isinstance(module, SigmoidNoAuxTopKRouter):
                 module.update_bias()
+
+    def configure_qk_clip(
+        self,
+        *,
+        enabled: bool,
+        query_chunk_size: int,
+    ) -> None:
+        for module in self.modules():
+            if isinstance(module, NoPELatentAttention):
+                module.configure_qk_clip(
+                    enabled=enabled,
+                    query_chunk_size=query_chunk_size,
+                )
+
+    @torch.no_grad()
+    def apply_qk_clip(self, threshold: float) -> dict[str, float | int]:
+        diagnostics = [
+            module.apply_qk_clip(threshold)
+            for module in self.modules()
+            if isinstance(module, NoPELatentAttention) and module.track_qk_logits
+        ]
+        return {
+            "maximum_attention_logit": max(
+                (
+                    float(item["maximum_attention_logit"])
+                    for item in diagnostics
+                ),
+                default=0.0,
+            ),
+            "clipped_heads": sum(
+                int(item["clipped_heads"]) for item in diagnostics
+            ),
+            "minimum_scale": min(
+                (float(item["minimum_scale"]) for item in diagnostics),
+                default=1.0,
+            ),
+        }
 
     def parameter_counts(self) -> dict[str, int]:
         total = sum(parameter.numel() for parameter in self.parameters())
@@ -1040,6 +1316,7 @@ class K3MiniForCausalLM(nn.Module):
         loads: list[list[int]] = []
         entropies: list[float] = []
         max_violations: list[float] = []
+        correction_bias_ranges: list[float] = []
         dead_streak = 0
         for module in self.modules():
             if not isinstance(module, (SoftmaxTopKRouter, SigmoidNoAuxTopKRouter)):
@@ -1061,12 +1338,16 @@ class K3MiniForCausalLM(nn.Module):
             mean = load.mean().clamp_min(1.0)
             max_violations.append(float(((load.max() - mean) / mean).item()))
             dead_streak = max(dead_streak, int(module.consecutive_dead_steps.max().item()))
+            if isinstance(module, SigmoidNoAuxTopKRouter):
+                bias = module.e_score_correction_bias.float()
+                correction_bias_ranges.append(float((bias.max() - bias.min()).item()))
         return {
             "expert_loads": loads,
             "mean_load_entropy": sum(entropies) / max(1, len(entropies)),
             "dead_experts": sum(sum(value == 0 for value in layer) for layer in loads),
             "max_load_violation": max(max_violations, default=0.0),
             "max_consecutive_dead_steps": dead_streak,
+            "max_correction_bias_range": max(correction_bias_ranges, default=0.0),
         }
 
 

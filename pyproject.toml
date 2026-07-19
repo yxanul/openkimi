@@ -10,6 +10,7 @@ dependencies = [
   "numpy>=1.26,<3",
   "tokenizers>=0.21.0,<1",
   "torch==2.7.0",
+  "wandb==0.28.1",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,9 @@ cuda = [
   "liger-kernel @ git+https://github.com/linkedin/Liger-Kernel.git@72a4ed47a5c593b58045a0af14d3f774a037bd92 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "megablocks @ git+https://github.com/databricks/megablocks.git@952db33d6eac334d22c61e47a0d5d41446298784 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
   "transformer-engine[pytorch]==2.16.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+eval = [
+  "lm_eval==0.4.12",
 ]
 
 [dependency-groups]

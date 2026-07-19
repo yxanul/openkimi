@@ -24,7 +24,10 @@ from .data import (
     SyntheticTokenDataset,
     load_validation_cache,
 )
+from .evaluation import run_lm_evaluation
 from .model import K3MiniForCausalLM, ModelOutput
+from .optim import OptimizerLike, build_optimizer
+from .tracking import WandbTracker
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,41 +75,35 @@ def seed_all(seed: int, rank: int) -> None:
         torch.cuda.manual_seed_all(seed + rank)
 
 
-def build_optimizer(model: K3MiniForCausalLM, cfg: TrainConfig) -> torch.optim.AdamW:
-    decay: list[torch.nn.Parameter] = []
-    no_decay: list[torch.nn.Parameter] = []
-    no_decay_fragments = ("norm", "bias", "A_log", "dt_bias", "correction")
-    for name, parameter in model.named_parameters():
-        if not parameter.requires_grad:
-            continue
-        if parameter.ndim < 2 or any(fragment in name for fragment in no_decay_fragments):
-            no_decay.append(parameter)
-        else:
-            decay.append(parameter)
-    return torch.optim.AdamW(
-        [
-            {"params": decay, "weight_decay": cfg.weight_decay},
-            {"params": no_decay, "weight_decay": 0.0},
-        ],
-        lr=cfg.learning_rate,
-        betas=cfg.betas,
-        eps=cfg.adam_epsilon,
-    )
-
-
-def learning_rate_at_tokens(consumed_tokens: int, cfg: TrainConfig) -> float:
+def learning_rate_at_tokens(
+    consumed_tokens: int,
+    cfg: TrainConfig,
+    *,
+    peak: float | None = None,
+    minimum: float | None = None,
+) -> float:
+    peak = cfg.learning_rate if peak is None else peak
+    minimum = cfg.min_learning_rate if minimum is None else minimum
     warmup_tokens = cfg.warmup_updates * cfg.global_batch_tokens
     if consumed_tokens < warmup_tokens:
-        return cfg.learning_rate * (consumed_tokens + cfg.global_batch_tokens) / warmup_tokens
+        return peak * (consumed_tokens + cfg.global_batch_tokens) / warmup_tokens
     progress = (consumed_tokens - warmup_tokens) / max(1, cfg.target_tokens - warmup_tokens)
     progress = min(1.0, max(0.0, progress))
     cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
-    return cfg.min_learning_rate + (cfg.learning_rate - cfg.min_learning_rate) * cosine
+    return minimum + (peak - minimum) * cosine
 
 
-def _set_learning_rate(optimizer: torch.optim.Optimizer, learning_rate: float) -> None:
+def _set_learning_rates(
+    optimizer: OptimizerLike,
+    adam_learning_rate: float,
+    muon_learning_rate: float,
+) -> None:
     for group in optimizer.param_groups:
-        group["lr"] = learning_rate
+        group["lr"] = (
+            muon_learning_rate
+            if group.get("optimizer_kind") == "muon"
+            else adam_learning_rate
+        )
 
 
 def _distributed_mean(value: torch.Tensor) -> torch.Tensor:
@@ -187,18 +184,19 @@ def train(
         fixed_samples = [next(iterator)]
 
     raw_model = K3MiniForCausalLM(model_cfg).to(context.device)
+    optimizer = build_optimizer(raw_model, train_cfg)
+    execution_model: torch.nn.Module = raw_model
     if train_cfg.compile_model:
-        raw_model = torch.compile(raw_model)  # type: ignore[assignment]
+        execution_model = torch.compile(raw_model)
     model: torch.nn.Module
     if context.distributed:
         model = DistributedDataParallel(
-            raw_model,
+            execution_model,
             device_ids=[context.local_rank] if context.device.type == "cuda" else None,
             broadcast_buffers=False,
         )
     else:
-        model = raw_model
-    optimizer = build_optimizer(raw_model, train_cfg)
+        model = execution_model
     scaler: torch.amp.GradScaler | None = None
     manager = CheckpointManager(train_cfg.output_dir, context.rank, context.world_size)
     consumed_tokens = update = 0
@@ -214,6 +212,16 @@ def train(
         iterator = iter(loader)
 
     output_dir = Path(train_cfg.output_dir)
+    startup = {
+        "device": str(context.device),
+        "world_size": context.world_size,
+        "gradient_accumulation": train_cfg.gradient_accumulation(
+            data_cfg,
+            context.world_size,
+        ),
+        "parameters": raw_model.parameter_counts(),
+        "backend": raw_model.backend.as_dict(),
+    }
     if context.is_main:
         output_dir.mkdir(parents=True, exist_ok=True)
         save_config(output_dir / "config.json", model_cfg, data_cfg, train_cfg)
@@ -221,15 +229,19 @@ def train(
             json.dumps(
                 {
                     "event": "startup",
-                    "device": str(context.device),
-                    "world_size": context.world_size,
-                    "gradient_accumulation": train_cfg.gradient_accumulation(data_cfg, context.world_size),
-                    "parameters": raw_model.parameter_counts(),
-                    "backend": raw_model.backend.as_dict(),
+                    **startup,
                 }
             ),
             flush=True,
         )
+    tracker = WandbTracker(
+        enabled=context.is_main,
+        output_dir=output_dir,
+        model_config=model_cfg,
+        data_config=data_cfg,
+        train_config=train_cfg,
+        startup=startup,
+    )
 
     validation_samples: list[dict[str, torch.Tensor]] | None = None
     validation_path = Path(data_cfg.validation_cache)
@@ -246,16 +258,39 @@ def train(
     ) * train_cfg.checkpoint_every_tokens
     running_loss = 0.0
     running_lm_loss = 0.0
+    running_mtp_loss = 0.0
+    running_router_aux = 0.0
+    running_router_z = 0.0
     running_tokens = 0
+    running_updates = 0
     log_start = time.perf_counter()
+    training_start = time.monotonic()
+    next_eval_time = (
+        training_start + train_cfg.eval_every_seconds
+        if train_cfg.eval_every_seconds and train_cfg.eval_tasks
+        else math.inf
+    )
     optimizer.zero_grad(set_to_none=True)
     model.train()
 
     while consumed_tokens < train_cfg.target_tokens:
-        learning_rate = learning_rate_at_tokens(consumed_tokens, train_cfg)
-        _set_learning_rate(optimizer, learning_rate)
+        adam_learning_rate = learning_rate_at_tokens(consumed_tokens, train_cfg)
+        muon_learning_rate = learning_rate_at_tokens(
+            consumed_tokens,
+            train_cfg,
+            peak=train_cfg.muon_learning_rate,
+            minimum=train_cfg.muon_min_learning_rate,
+        )
+        _set_learning_rates(
+            optimizer,
+            adam_learning_rate,
+            muon_learning_rate,
+        )
         step_loss = torch.zeros((), device=context.device)
         step_lm_loss = torch.zeros((), device=context.device)
+        step_mtp_loss = torch.zeros((), device=context.device)
+        step_router_aux = torch.zeros((), device=context.device)
+        step_router_z = torch.zeros((), device=context.device)
 
         for micro_step in range(grad_accum):
             batch = fixed_samples[0] if fixed_samples is not None else next(iterator)
@@ -273,16 +308,25 @@ def train(
             loss.backward()
             step_loss += output.loss.detach() / grad_accum
             step_lm_loss += output.lm_loss.detach() / grad_accum
+            if output.mtp_loss is not None:
+                step_mtp_loss += output.mtp_loss.detach() / grad_accum
+            step_router_aux += output.router_aux_loss.detach() / grad_accum
+            step_router_z += output.router_z_loss.detach() / grad_accum
 
         gradient_norm = torch.nn.utils.clip_grad_norm_(raw_model.parameters(), train_cfg.gradient_clip)
+        gradients_finite = bool(torch.isfinite(gradient_norm).item())
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
         raw_model.update_router_biases()
         update += 1
         consumed_tokens += train_cfg.global_batch_tokens
         running_tokens += train_cfg.global_batch_tokens
+        running_updates += 1
         running_loss += float(_distributed_mean(step_loss))
         running_lm_loss += float(_distributed_mean(step_lm_loss))
+        running_mtp_loss += float(_distributed_mean(step_mtp_loss))
+        running_router_aux += float(_distributed_mean(step_router_aux))
+        running_router_z += float(_distributed_mean(step_router_z))
 
         should_log = update % train_cfg.log_every_updates == 0 or update == 1
         router_diagnostics = raw_model.router_diagnostics() if should_log else {}
@@ -293,25 +337,49 @@ def train(
             if context.device.type == "cuda":
                 torch.cuda.synchronize(context.device)
             elapsed = max(1e-9, time.perf_counter() - log_start)
-            divisor = 1 if update == 1 else train_cfg.log_every_updates
+            divisor = running_updates
+            optimizer_diagnostics = getattr(optimizer, "diagnostics", lambda: {})()
+            memory_metrics: dict[str, float] = {}
+            if context.device.type == "cuda":
+                memory_metrics = {
+                    "allocated_gib": torch.cuda.memory_allocated(context.device) / 2**30,
+                    "reserved_gib": torch.cuda.memory_reserved(context.device) / 2**30,
+                    "max_allocated_gib": torch.cuda.max_memory_allocated(context.device)
+                    / 2**30,
+                }
+                torch.cuda.reset_peak_memory_stats(context.device)
+            train_metrics = {
+                "update": update,
+                "tokens": consumed_tokens,
+                "loss": running_loss / divisor,
+                "lm_loss": running_lm_loss / divisor,
+                "mtp_loss": running_mtp_loss / divisor,
+                "router_aux_loss": running_router_aux / divisor,
+                "router_z_loss": running_router_z / divisor,
+                "adam_learning_rate": adam_learning_rate,
+                "muon_learning_rate": muon_learning_rate,
+                "gradient_norm": float(gradient_norm),
+                "gradients_finite": int(gradients_finite),
+                "tokens_per_second": running_tokens / elapsed,
+                "elapsed_seconds": time.monotonic() - training_start,
+                **optimizer_diagnostics,
+                **memory_metrics,
+            }
             print(
                 json.dumps(
                     {
                         "event": "train",
-                        "update": update,
-                        "tokens": consumed_tokens,
-                        "loss": running_loss / divisor,
-                        "lm_loss": running_lm_loss / divisor,
-                        "learning_rate": learning_rate,
-                        "gradient_norm": float(gradient_norm),
-                        "tokens_per_second": running_tokens / elapsed,
+                        **train_metrics,
                         "router": router_diagnostics,
                     }
                 ),
                 flush=True,
             )
-            running_loss = running_lm_loss = 0.0
+            tracker.log_train(train_metrics, router_diagnostics)
+            running_loss = running_lm_loss = running_mtp_loss = 0.0
+            running_router_aux = running_router_z = 0.0
             running_tokens = 0
+            running_updates = 0
             log_start = time.perf_counter()
 
         if consumed_tokens >= next_validation:
@@ -322,6 +390,7 @@ def train(
                         json.dumps({"event": "validation", "tokens": consumed_tokens, **metrics}),
                         flush=True,
                     )
+                    tracker.log_validation(consumed_tokens, metrics)
             elif context.is_main:
                 print(
                     json.dumps(
@@ -333,6 +402,39 @@ def train(
                     flush=True,
                 )
             next_validation += train_cfg.validate_every_tokens
+
+        if time.monotonic() >= next_eval_time:
+            if context.distributed:
+                dist.barrier()
+            if context.is_main:
+                if context.device.type == "cuda":
+                    torch.cuda.synchronize(context.device)
+                    torch.cuda.empty_cache()
+                eval_start = time.perf_counter()
+                evaluation = run_lm_evaluation(
+                    raw_model,
+                    data_cfg,
+                    train_cfg,
+                    context.device,
+                )
+                evaluation["elapsed_seconds"] = time.perf_counter() - eval_start
+                print(
+                    json.dumps(
+                        {
+                            "event": "lm_evaluation",
+                            "tokens": consumed_tokens,
+                            **evaluation,
+                        }
+                    ),
+                    flush=True,
+                )
+                tracker.log_evaluation(consumed_tokens, evaluation)
+                if context.device.type == "cuda":
+                    torch.cuda.empty_cache()
+            if context.distributed:
+                dist.barrier()
+            next_eval_time = time.monotonic() + train_cfg.eval_every_seconds
+            log_start = time.perf_counter()
 
         if consumed_tokens >= next_checkpoint:
             manager.save(
@@ -348,6 +450,12 @@ def train(
             )
             next_checkpoint += train_cfg.checkpoint_every_tokens
 
+        if (
+            train_cfg.max_duration_seconds is not None
+            and time.monotonic() - training_start >= train_cfg.max_duration_seconds
+        ):
+            break
+
     checkpoint = manager.save(
         consumed_tokens=consumed_tokens,
         update=update,
@@ -361,8 +469,10 @@ def train(
     )
     if context.distributed:
         dist.destroy_process_group()
+    tracker.finish()
     return {
         "consumed_tokens": consumed_tokens,
         "updates": update,
         "checkpoint": str(checkpoint),
+        "duration_seconds": time.monotonic() - training_start,
     }

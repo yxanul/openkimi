@@ -65,13 +65,14 @@ class CurrentScalingSwiGLU(nn.Module):
         return self.down_proj(hidden, is_first_microbatch=is_first_microbatch)
 
 
-def te_checkpoint(function: Any, *args: torch.Tensor) -> Any:
+def te_checkpoint(function: Any, *args: torch.Tensor, **kwargs: Any) -> Any:
     import transformer_engine.pytorch as te
 
     return te.checkpoint(
         function,
         *args,
         use_reentrant=False,
+        **kwargs,
     )
 
 

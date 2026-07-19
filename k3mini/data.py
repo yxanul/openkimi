@@ -51,6 +51,9 @@ class SuperBPETokenizer:
     def encode_batch(self, texts: Sequence[str]) -> list[list[int]]:
         return [encoding.ids for encoding in self._tokenizer.encode_batch(list(texts))]
 
+    def encode(self, text: str) -> list[int]:
+        return self._tokenizer.encode(text).ids
+
     def decode(self, token_ids: Sequence[int], *, skip_special_tokens: bool = False) -> str:
         return self._tokenizer.decode(list(token_ids), skip_special_tokens=skip_special_tokens)
 
