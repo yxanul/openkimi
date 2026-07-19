@@ -1,0 +1,120 @@
+{
+  "date": "2026-07-19",
+  "hardware": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "driver": "595.58.03",
+    "torch": "2.7.0+cu126"
+  },
+  "common_conditions": {
+    "parameters_total": 881040858,
+    "parameters_active_estimate": 244030938,
+    "sequence_length": 4096,
+    "global_batch_tokens": 262144,
+    "microbatch_sequences": 16,
+    "gradient_accumulation_steps": 4,
+    "precision": "BF16 attention/router with FP8 Current Scaling linears and LM head",
+    "mtp_depth": 3,
+    "mtp_loss_weight": 0.1,
+    "routed_experts": 64,
+    "top_k": 4,
+    "router": "sigmoid_noaux",
+    "expert_backend": "SonicMoE",
+    "loss_backend": "QuACK",
+    "warmup_updates": 100,
+    "router_slots": 1152
+  },
+  "trials": [
+    {
+      "name": "muon-8e-3-router-muon-sign-1e-3",
+      "wandb_url": "https://wandb.ai/davidfranco2300-other/openkimi/runs/5mgz0dlg",
+      "last_update": 30,
+      "consumed_tokens": 7864320,
+      "router_weight_optimizer": "Muon",
+      "muon_peak_learning_rate": 0.008,
+      "router_bias_update_rule": "sign",
+      "router_bias_update_rate": 0.001,
+      "dead_expert_slots": 310,
+      "maximum_load_violation_approx": 15.0,
+      "outcome": "rejected",
+      "reason": "Rapid expert collapse despite decreasing LM loss."
+    },
+    {
+      "name": "muon-8e-3-router-adamw-sign-1e-3",
+      "wandb_url": "https://wandb.ai/davidfranco2300-other/openkimi/runs/m7gwwk4g",
+      "last_update": 20,
+      "consumed_tokens": 5242880,
+      "router_weight_optimizer": "AdamW",
+      "muon_peak_learning_rate": 0.008,
+      "router_bias_update_rule": "sign",
+      "router_bias_update_rate": 0.001,
+      "dead_expert_slots": 43,
+      "maximum_load_violation": 14.98,
+      "outcome": "rejected",
+      "reason": "Moving router matrices to AdamW did not prevent backbone-driven collapse."
+    },
+    {
+      "name": "muon-1e-3-router-adamw-sign-1e-3",
+      "wandb_url": "https://wandb.ai/davidfranco2300-other/openkimi/runs/wsl4fiwe",
+      "last_update": 40,
+      "consumed_tokens": 10485760,
+      "router_weight_optimizer": "AdamW",
+      "muon_peak_learning_rate": 0.001,
+      "router_bias_update_rule": "sign",
+      "router_bias_update_rate": 0.001,
+      "dead_expert_slots": 0,
+      "maximum_load_violation": 11.82,
+      "outcome": "rejected",
+      "reason": "Stable through update 20, then late backbone routers concentrated."
+    },
+    {
+      "name": "muon-1e-3-router-adamw-sign-1e-2",
+      "wandb_url": "https://wandb.ai/davidfranco2300-other/openkimi/runs/7t189625",
+      "last_update": 45,
+      "consumed_tokens": 11796480,
+      "router_weight_optimizer": "AdamW",
+      "muon_peak_learning_rate": 0.001,
+      "router_bias_update_rule": "sign",
+      "router_bias_update_rate": 0.01,
+      "dead_expert_slots": 0,
+      "maximum_load_violation": 6.4808349609375,
+      "mean_load_entropy": 4.094615194532606,
+      "maximum_correction_bias_range": 0.4800000786781311,
+      "outcome": "rejected",
+      "reason": "Faster correction delayed but did not prevent late-backbone concentration."
+    },
+    {
+      "name": "muon-1e-3-router-adamw-proportional-1e-2",
+      "source_commit": "d4df2f65",
+      "wandb_url": "https://wandb.ai/davidfranco2300-other/openkimi/runs/68t095a7",
+      "last_update": 45,
+      "consumed_tokens": 11796480,
+      "router_weight_optimizer": "AdamW",
+      "muon_peak_learning_rate": 0.001,
+      "router_bias_update_rule": "proportional_clipped",
+      "router_bias_update_rate": 0.01,
+      "dead_expert_slots": 0,
+      "maximum_load_violation": 10.93218994140625,
+      "maximum_correction_bias_range": 0.3982727527618408,
+      "outcome": "rejected",
+      "reason": "Smoother early correction did not stop late-backbone concentration."
+    }
+  ],
+  "next_gate": {
+    "source_commit": "e3db0e0",
+    "config": "configs/h100-candidate-top4-mtp3-muonclip-1h.json",
+    "muon_peak_learning_rate": 0.0005,
+    "muon_min_learning_rate": 0.00005,
+    "router_weight_optimizer": "AdamW",
+    "router_bias_update_rule": "sign",
+    "router_bias_update_rate": 0.001,
+    "minimum_stability_updates": 50,
+    "status": "not_started",
+    "blocker": "H100 host 85.9.221.107 became unreachable before process launch."
+  },
+  "notes": [
+    "The main and MTP losses remained finite in every stopped trial.",
+    "At 1e-3 Muon, concentration was localized to late backbone routers; the three MTP routers remained balanced.",
+    "Warm logged throughput was approximately 57k to 60k tokens/s; update 1 includes compilation and is excluded.",
+    "A candidate is stopped before the one-hour run when load violation accelerates or dead experts appear."
+  ]
+}
