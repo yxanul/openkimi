@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -257,6 +258,7 @@ def run_lm_evaluation(
         max_length=data_config.sequence_length,
         batch_size=train_config.eval_batch_size,
     )
+    Path(train_config.eval_cache).parent.mkdir(parents=True, exist_ok=True)
     with _preserve_training_mode(model):
         result = lm_eval.simple_evaluate(
             model=adapter,
