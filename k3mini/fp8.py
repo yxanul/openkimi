@@ -40,6 +40,11 @@ class CurrentScalingLinear(nn.Module):
         *,
         is_first_microbatch: bool | None = None,
     ) -> torch.Tensor:
+        if math.prod(x.shape[:-1]) % 8:
+            # TE FP8 TN GEMMs require a leading-token product divisible by 8.
+            # Sequential MTP shortens the sequence at each depth; uncommon
+            # small batches therefore use the exact BF16 linear fallback.
+            return F.linear(x, self.linear.weight)
         return self.linear(x, is_first_microbatch=is_first_microbatch)
 
 

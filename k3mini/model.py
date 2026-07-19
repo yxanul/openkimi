@@ -1083,7 +1083,12 @@ class K3MiniForCausalLM(nn.Module):
     def _lm_loss(
         self, hidden: torch.Tensor, labels: torch.Tensor, return_logits: bool
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if self.cfg.linear_precision is LinearPrecision.FP8_CURRENT and not return_logits:
+        fp8_compatible_tokens = math.prod(hidden.shape[:-1]) % 8 == 0
+        if (
+            self.cfg.linear_precision is LinearPrecision.FP8_CURRENT
+            and not return_logits
+            and fp8_compatible_tokens
+        ):
             assert self.loss_fn is not None
             return _run_external_fused_loss(
                 self.loss_fn,
