@@ -19,6 +19,7 @@ from .config import (
     LossBackend,
     ModelConfig,
     RoutedExpertBackend,
+    RouterBiasUpdateRule,
     RouterType,
 )
 
@@ -440,6 +441,7 @@ class SigmoidNoAuxTopKRouter(nn.Module):
         self.top_k = cfg.top_k
         self.scale = cfg.router_scale
         self.update_rate = cfg.router_bias_update_rate
+        self.update_rule = cfg.router_bias_update_rule
         self.n_groups = cfg.router_num_groups
         self.topk_groups = cfg.router_topk_groups
         self.experts_per_group = self.n_experts // self.n_groups
@@ -514,9 +516,18 @@ class SigmoidNoAuxTopKRouter(nn.Module):
             dist.all_reduce(load)
         self.last_load.copy_(load)
         if load.sum() > 0:
+            imbalance = (load.mean() - load) / load.mean().clamp_min(1.0)
+            if self.update_rule is RouterBiasUpdateRule.SIGN:
+                correction = imbalance.sign()
+            else:
+                # Retain a full response for badly overloaded experts while
+                # avoiding bang-bang updates for sampling-scale imbalance.
+                correction = imbalance.clamp(-1.0, 1.0)
             self.e_score_correction_bias.add_(
-                self.update_rate * torch.sign(load.mean() - load).to(self.e_score_correction_bias)
+                self.update_rate * correction.to(self.e_score_correction_bias)
             )
+            # Only relative expert scores affect selection.
+            self.e_score_correction_bias.sub_(self.e_score_correction_bias.mean())
         self.pending_load.zero_()
 
 

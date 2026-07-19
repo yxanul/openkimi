@@ -38,6 +38,11 @@ class RouterType(StrEnum):
     SIGMOID_NOAUX = "sigmoid_noaux"
 
 
+class RouterBiasUpdateRule(StrEnum):
+    SIGN = "sign"
+    PROPORTIONAL = "proportional"
+
+
 class OptimizerType(StrEnum):
     ADAMW = "adamw"
     MUONCLIP = "muonclip"
@@ -70,6 +75,7 @@ class ModelConfig:
     router_aux_loss_coefficient: float = 0.01
     router_z_loss_coefficient: float = 0.001
     router_bias_update_rate: float = 1e-3
+    router_bias_update_rule: RouterBiasUpdateRule = RouterBiasUpdateRule.SIGN
     router_num_groups: int = 1
     router_topk_groups: int = 1
     dropout: float = 0.0
@@ -89,6 +95,7 @@ class ModelConfig:
 
     def __post_init__(self) -> None:
         self.router_type = RouterType(self.router_type)
+        self.router_bias_update_rule = RouterBiasUpdateRule(self.router_bias_update_rule)
         self.kernel_backend = KernelBackend(self.kernel_backend)
         self.routed_expert_backend = RoutedExpertBackend(self.routed_expert_backend)
         self.loss_backend = LossBackend(self.loss_backend)
@@ -152,6 +159,8 @@ class ModelConfig:
             raise ValueError("loss_backend=quack requires linear_precision=fp8_current")
         if self.n_routed_experts % self.router_num_groups:
             raise ValueError("n_routed_experts must be divisible by router_num_groups")
+        if self.router_bias_update_rate <= 0:
+            raise ValueError("router_bias_update_rate must be positive")
         if not 1 <= self.router_topk_groups <= self.router_num_groups:
             raise ValueError("router_topk_groups must be in [1, router_num_groups]")
         if self.kernel_backend is KernelBackend.H100 and self.kda_head_dim != 128:
