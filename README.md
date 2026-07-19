@@ -36,6 +36,8 @@ is zero-initialized.
 | Dense/shared FFNs | PyTorch SwiGLU | BF16 default or TE 2.16 `Float8CurrentScaling`; gate/up share one FP8 GEMM |
 | LM loss | PyTorch cross-entropy | Liger BF16 default or chunked TE Current Scaling FP8 + Liger/QuACK CE; full 128K logits are omitted |
 | Router | softmax top-4 with balance/z losses; sigmoid no-aux ablation | same |
+| MTP | sequential training-only KDA + LatentMoE stages | same, with shared FP8/BF16 LM head |
+| Optimizer | AdamW | AdamW or pinned GNS Muon + Moonshot QK-Clip |
 
 The default softmax router uses a `0.01` load-balancing coefficient and `0.001` z-loss coefficient.
 The selectable `sigmoid_noaux` router uses unbiased mixture weights, selection-only correction bias,
@@ -109,9 +111,10 @@ The installer uses exact package versions and `uv pip --target --no-deps`. This 
 different from asking `uv` to resolve QuACK's CUDA-13 extra inside the training environment; the
 upstream README warns that dependency installation order matters for that path.
 
-SonicMoE is also isolated because its current source metadata requires a newer Torch release than
-the pinned training stack. The installer combines pinned SonicMoE `0349404` and QuACK 0.6.1 in one
-target without changing the locked environment:
+SonicMoE and Gram Newton-Schulz are also isolated because their current source metadata requires a
+newer Torch release than the pinned training stack. The installer combines pinned SonicMoE
+`0349404`, Gram Newton-Schulz `e45d0aca`, and QuACK 0.6.1 in one target without changing the locked
+environment:
 
 ```bash
 scripts/install_sonic_isolated.sh
@@ -125,6 +128,8 @@ scripts/run_with_sonic.sh \
 This exact-pinned BF16 path passes on Torch 2.7 with a small import-only FP4 dtype sentinel; it does
 not exercise Sonic's FP8/FP4 branches. The adapter deliberately uses Sonic's fixed-top-k internal
 primitives, so the pin must be updated together with the adapter and its CUDA parity tests.
+Muon keeps the Hopper Gram-Newton-Schulz kernels, while its small variable-length momentum
+`foreach` helper runs eagerly to avoid a Torch graph per parameter-group cardinality.
 
 ## Configuration and commands
 
@@ -153,6 +158,43 @@ ClimbMix with deterministic random tokens for plumbing tests only.
 
 The default global batch is 262,144 tokens. With one 4,096-token sequence per GPU, gradient
 accumulation is derived as `64 / world_size`, which is integral for one through eight GPUs.
+
+## MTP, MuonClip, W&B, and benchmark evaluation
+
+`mtp_depth` adds dedicated sequential training-only stages after the main final hidden state. Each
+stage RMS-normalizes and combines the prior representation with the shared embedding of the next
+ground-truth token, applies a KDA + LatentMoE block with a fresh AttnRes state, and predicts one
+additional future token through the tied LM head. Stages share neither block parameters nor
+projection parameters. They run only while training with labels; inference and validation
+perplexity continue to use the main next-token path. The optimized candidate profiles cover
+256-wide expert latents, 768-wide routed experts, a 1,024-wide shared expert, top-2/top-4, and MTP
+depths 3/4.
+
+`optimizer: "muonclip"` sends non-embedding matrix weights to the pinned Dao-AILab
+Gram-Newton-Schulz Muon implementation and leaves the tied embedding/head, scalars, biases, and
+norms on AdamW. Muon defaults to a base learning rate of `8e-3`, RMS adjustment, one GNS restart,
+and decoupled weight decay. Moonshot-style per-head QK-Clip observes NoPE MLA logits during the
+forward pass and rescales offending Q/K projections after the optimizer update; the default
+threshold is 100.
+
+W&B is opt-in and rank-zero only. Its run ID is persisted under the output directory for resume,
+and logs main/MTP losses, router losses, gradient norm/finite state, Adam/Muon learning rates,
+throughput, memory, QK-Clip activity, expert load entropy, dead-expert streaks, correction-bias
+range, and periodic per-layer load histograms. Credentials belong in the host's normal W&B
+credential store, never in this repository.
+
+Periodic evaluation uses `lm-eval==0.4.12` through the native SuperBPE tokenizer. Any harness task
+name is accepted; tested/configured tasks include `hellaswag`, `piqa`, `winogrande`, `openbookqa`,
+`arc_easy`, `arc_challenge`, `mmlu`, `commonsense_qa`, and `triviaqa`. Install the extra with:
+
+```bash
+uv sync --locked --extra eval
+```
+
+The one-hour H100 stability profile is
+`configs/h100-candidate-top4-mtp3-muonclip-1h.json`. It evaluates HellaSwag, ARC-Easy,
+ARC-Challenge, and MMLU every ten minutes with a bounded sample count; larger benchmark runs should
+use a separate validation job.
 
 ## Data path and exact resume
 

@@ -777,10 +777,11 @@ and [inclusionAI/cuLA](https://github.com/inclusionAI/cuLA).
 These are separate from backend parity and require the candidate configuration to
 be implemented first.
 
-- [ ] Add explicit configs for latent 256, routed hidden 768, shared hidden 1,024,
+- [x] Add explicit configs for latent 256, routed hidden 768, shared hidden 1,024,
   and top-2/top-4; keep the measured profile available.
-- [ ] Add MTP depth 3 and depth 4 configs with loss weights and inference
-  acceptance diagnostics.
+- [x] Add MTP depth 3 and depth 4 training configs with loss weights.
+- [ ] Add inference draft-token acceptance diagnostics after the training-only
+  MTP stability run establishes a useful checkpoint.
 - [ ] Measure top-2 vs top-4:
   - Total and active parameters.
   - Routed/shared FLOPs and memory.

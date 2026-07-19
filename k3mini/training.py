@@ -403,7 +403,7 @@ def train(
                 )
             next_validation += train_cfg.validate_every_tokens
 
-        if time.monotonic() >= next_eval_time:
+        if time.monotonic() >= next_eval_time and should_log:
             if context.distributed:
                 dist.barrier()
             if context.is_main:
