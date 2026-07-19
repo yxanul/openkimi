@@ -177,8 +177,11 @@ small sigmoid/no-aux routers collapsed under the `8e-3` Muon schedule in an obse
 stability run; moving only routers to AdamW still collapsed as the backbone representations
 drifted. The generic MuonClip default remains `8e-3`, while the measured candidate profile uses
 the public Moonlight toy-training rate of `1e-3`, RMS adjustment, one GNS restart, and decoupled
-weight decay. Moonshot-style per-head QK-Clip observes NoPE MLA logits during the forward pass and
-rescales offending Q/K projections after the optimizer update; the default threshold is 100.
+weight decay. Its auxiliary-free correction bias uses `1e-2`: the original `1e-3` rate could not
+track deeper representation drift in this much smaller model. Mixture weights remain the unbiased
+sigmoid probabilities; correction affects selection only. Moonshot-style per-head QK-Clip
+observes NoPE MLA logits during the forward pass and rescales offending Q/K projections after the
+optimizer update; the default threshold is 100.
 
 W&B is opt-in and rank-zero only. Its run ID is persisted under the output directory for resume,
 and logs main/MTP losses, router losses, gradient norm/finite state, Adam/Muon learning rates,
