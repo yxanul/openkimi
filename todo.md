@@ -4,6 +4,31 @@ This is the runbook for choosing the next OpenKimi training backends. Preserve t
 model mathematics first; throughput wins only count after forward, backward, and
 optimizer-step parity pass.
 
+## Next: MuonClip/router stability gate and one-hour run
+
+- [x] Add resumable W&B tracking for main/MTP/router losses, gradient health,
+  QK-Clip, throughput, memory, expert loads, entropy, dead-expert streaks, and
+  correction-bias range.
+- [x] Add training-only sequential MTP with shared embedding/head and dedicated
+  KDA+MoE stages; depth 3 is the current candidate.
+- [x] Add the pinned Gram Newton-Schulz Muon path, AdamW fallback groups, and
+  QK-Clip. Router matrices remain on AdamW.
+- [x] Reject Muon peak `8e-3`: both Muon- and AdamW-managed router matrices
+  collapse. Reject Muon `1e-3` with sign correction rates `1e-3` and `1e-2`;
+  reject the clipped proportional `1e-2` controller. See
+  `profiles/h100-muonclip-router-stability-2026-07-19.json`.
+- [ ] Run the next 50-update stability gate from commit `e3db0e0`: Muon peak
+  `5e-4`, minimum `5e-5`, router matrices on AdamW, and the published sign
+  correction at `1e-3`.
+- [ ] Continue the same process to one hour only if no experts die, load
+  violation does not accelerate, losses/gradients remain finite, and the three
+  MTP router layers stay balanced.
+- [ ] Confirm the 10-minute HellaSwag/ARC-E/ARC-C/MMLU evaluation runs without
+  exhausting the several-GiB VRAM reserve. Record main validation loss
+  separately from MTP loss.
+- [ ] If `5e-4` still concentrates, compare AdamW and Muon `2.5e-4` at equal
+  tokens before changing the sigmoid no-aux routing equation again.
+
 ## Next: guarded KDA diagonal MMA and backward fusion
 
 The saved-intermediate exact FLA configuration is the control baseline. On the
