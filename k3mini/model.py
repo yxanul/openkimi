@@ -273,9 +273,15 @@ class NoPELatentAttention(nn.Module):
                 start : start + self.qk_clip_query_chunk_size,
             ]
             logits = torch.matmul(query, key_transpose) * scale
-            maximum.maximum_(logits.float().amax(dim=(0, 2, 3)))
-        self.observed_max_attention_logits.maximum_(
-            maximum.to(self.observed_max_attention_logits)
+            maximum = torch.maximum(
+                maximum,
+                logits.float().amax(dim=(0, 2, 3)),
+            )
+        self.observed_max_attention_logits.copy_(
+            torch.maximum(
+                self.observed_max_attention_logits,
+                maximum.to(self.observed_max_attention_logits),
+            )
         )
 
     def configure_qk_clip(

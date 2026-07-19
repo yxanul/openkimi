@@ -87,6 +87,13 @@ def test_qk_clip_scales_only_heads_above_threshold(tiny_model_config) -> None:
     }
 
 
+def test_qk_clip_observes_forward_logits(tiny_model_config) -> None:
+    module = NoPELatentAttention(tiny_model_config).train()
+    module.configure_qk_clip(enabled=True, query_chunk_size=3)
+    module(torch.randn(2, 7, tiny_model_config.d_model))
+    assert torch.isfinite(module.observed_max_attention_logits).all()
+
+
 def test_attnres_zero_query_is_average_and_gradients(tiny_model_config) -> None:
     backend = resolve_backend(KernelBackend.REFERENCE)
     read = BlockAttnResRead(tiny_model_config.d_model, 1e-6, backend)
