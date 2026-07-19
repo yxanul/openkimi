@@ -8,6 +8,22 @@ import torch
 from .config import OptimizerType, TrainConfig
 
 
+def _disable_variable_length_gns_helper_compile() -> None:
+    """Keep GNS kernels compiled while avoiding list-cardinality graph explosions."""
+    import importlib
+
+    module = importlib.import_module("gram_newton_schulz.muon.muon")
+    helper = module.muon_update_pre_orthogonalize
+    original = getattr(helper, "_torchdynamo_orig_callable", None)
+    if original is not None:
+        # MoE models have many shape groups with different parameter counts.
+        # The upstream fullgraph helper specializes on every Python-list
+        # length, reaches Torch's recompile limit, and never reaches the actual
+        # Hopper GNS kernels. The helper is only momentum foreach arithmetic;
+        # the Gram-Newton-Schulz operator and its CUDA kernels remain unchanged.
+        module.muon_update_pre_orthogonalize = torch.compiler.disable(original)
+
+
 class OptimizerLike(Protocol):
     @property
     def param_groups(self) -> list[dict[str, Any]]: ...
@@ -94,6 +110,7 @@ class MuonClipOptimizer:
                 "run scripts/install_sonic_isolated.sh and launch through "
                 "scripts/run_with_sonic.sh"
             ) from error
+        _disable_variable_length_gns_helper_compile()
 
         self.model = model
         self.cfg = cfg
