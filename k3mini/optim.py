@@ -156,6 +156,11 @@ class MuonClipOptimizer:
             ns_max_batch_size=cfg.muon_ns_max_batch_size,
             gram_newton_schulz_restart_iterations=[2],
         )
+        # Upstream compiles this AdamW closure. Our token scheduler updates the
+        # Python-float LR every step, which specializes a fresh graph per value
+        # and hits Torch's recompile limit during warmup. AdamW is not the GNS
+        # kernel path, so keep this small fallback optimizer eager.
+        self.inner._compiled_scalar_step = self.scalar_optimizer.step
         self.last_clip_diagnostics: dict[str, float | int] = {
             "maximum_attention_logit": 0.0,
             "clipped_heads": 0,
